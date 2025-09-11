@@ -14,15 +14,54 @@
 
 version: 2
 updates:
-  # 配置submodules更新
+  # crater-backend submodule updates
+  # Separated schedule to avoid concurrent PR creation issues
+  # See: https://github.com/raids-lab/crater/issues/126
   - package-ecosystem: "gitsubmodule"
     directory: "/"
     schedule:
       interval: "daily"
-      time: "17:00"  # UTC时间，对应北京时间凌晨1点
-    open-pull-requests-limit: 5
+      time: "17:00"  # UTC time, corresponds to 1:00 AM Beijing time
+    open-pull-requests-limit: 1
     labels:
       - "dependabot"
+      - "backend"
     commit-message:
       prefix: "chore"
       include: "scope"
+    allow:
+      - dependency-name: "crater-backend"
+      
+  # crater-frontend submodule updates
+  # Scheduled 1 hour after backend to prevent concurrent auto-merge failures
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "18:00"  # UTC time, corresponds to 2:00 AM Beijing time
+    open-pull-requests-limit: 1
+    labels:
+      - "dependabot"
+      - "frontend"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    allow:
+      - dependency-name: "crater-frontend"
+      
+  # storage-server submodule updates
+  # Scheduled 2 hours after backend to prevent concurrent auto-merge failures
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "19:00"  # UTC time, corresponds to 3:00 AM Beijing time
+    open-pull-requests-limit: 1
+    labels:
+      - "dependabot"
+      - "storage server"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    allow:
+      - dependency-name: "storage-server"
