@@ -38,16 +38,19 @@ const (
 )
 
 type NodeBriefInfo struct {
-	Name        string                   `json:"name"`
-	Role        NodeRole                 `json:"role"`
-	Arch        string                   `json:"arch"`
-	Status      corev1.NodeConditionType `json:"status"`
-	Vendor      string                   `json:"vendor"`
-	Taints      []string                 `json:"taints"`
-	Capacity    corev1.ResourceList      `json:"capacity"`
-	Allocatable corev1.ResourceList      `json:"allocatable"`
-	Used        corev1.ResourceList      `json:"used"`
-	Workloads   int                      `json:"workloads"`
+	Name          string                   `json:"name"`
+	Role          NodeRole                 `json:"role"`
+	Arch          string                   `json:"arch"`
+	Status        corev1.NodeConditionType `json:"status"`
+	Vendor        string                   `json:"vendor"`
+	Taints        []string                 `json:"taints"`
+	Capacity      corev1.ResourceList      `json:"capacity"`
+	Allocatable   corev1.ResourceList      `json:"allocatable"`
+	Used          corev1.ResourceList      `json:"used"`
+	Workloads     int                      `json:"workloads"`
+	Annotations   map[string]string        `json:"annotations"`
+	KernelVersion string                   `json:"kernelVersion"`
+	GPUDriver     string                   `json:"gpuDriver"`
 }
 
 type Pod struct {
@@ -75,9 +78,11 @@ type ClusterNodeDetail struct {
 	Arch                    string                   `json:"arch"`
 	KubeletVersion          string                   `json:"kubeletVersion"`
 	ContainerRuntimeVersion string                   `json:"containerRuntimeVersion"`
+	KernelVersion           string                   `json:"kernelVersion"`
 	GPUMemory               string                   `json:"gpuMemory"`
 	GPUCount                int                      `json:"gpuCount"`
 	GPUArch                 string                   `json:"gpuArch"`
+	GPUDriver               string                   `json:"gpuDriver"`
 }
 
 type GPUInfo struct {
@@ -236,17 +241,26 @@ func (nc *NodeClient) ListNodes(ctx context.Context) ([]NodeBriefInfo, error) {
 			vendor = vendorLabel
 		}
 
+		// 获取 GPU 驱动版本
+		gpuDriver := ""
+		if driver, exists := node.Labels["nvidia.com/cuda.driver-version.full"]; exists {
+			gpuDriver = driver
+		}
+
 		nodeInfos[i] = NodeBriefInfo{
-			Name:        node.Name,
-			Role:        getNodeRole(node),
-			Arch:        node.Status.NodeInfo.Architecture,
-			Status:      getNodeStatus(node),
-			Vendor:      vendor,
-			Taints:      taintsToStringArray(node.Spec.Taints),
-			Capacity:    node.Status.Capacity,
-			Allocatable: node.Status.Allocatable,
-			Used:        usedResources,
-			Workloads:   workloadCount,
+			Name:          node.Name,
+			Role:          getNodeRole(node),
+			Arch:          node.Status.NodeInfo.Architecture,
+			Status:        getNodeStatus(node),
+			Vendor:        vendor,
+			Taints:        taintsToStringArray(node.Spec.Taints),
+			Capacity:      node.Status.Capacity,
+			Allocatable:   node.Status.Allocatable,
+			Used:          usedResources,
+			Workloads:     workloadCount,
+			Annotations:   node.Annotations,
+			KernelVersion: node.Status.NodeInfo.KernelVersion,
+			GPUDriver:     gpuDriver,
 		}
 	}
 
@@ -258,6 +272,12 @@ func (nc *NodeClient) GetNode(ctx context.Context, name string) (ClusterNodeDeta
 	node := &corev1.Node{}
 	if err := nc.Get(ctx, client.ObjectKey{Name: name}, node); err != nil {
 		return ClusterNodeDetail{}, err
+	}
+
+	// 获取 GPU 驱动版本
+	gpuDriver := ""
+	if driver, exists := node.Labels["nvidia.com/cuda.driver-version.full"]; exists {
+		gpuDriver = driver
 	}
 
 	nodeInfo := ClusterNodeDetail{
@@ -272,16 +292,45 @@ func (nc *NodeClient) GetNode(ctx context.Context, name string) (ClusterNodeDeta
 		Arch:                    node.Status.NodeInfo.Architecture,
 		KubeletVersion:          node.Status.NodeInfo.KubeletVersion,
 		ContainerRuntimeVersion: node.Status.NodeInfo.ContainerRuntimeVersion,
+		KernelVersion:           node.Status.NodeInfo.KernelVersion,
+		GPUDriver:               gpuDriver,
 	}
 	return nodeInfo, nil
 }
 
-func (nc *NodeClient) UpdateNodeunschedule(ctx context.Context, name string) error {
+func (nc *NodeClient) UpdateNodeunschedule(ctx context.Context, name, reason, operator string) error {
 	node, err := nc.KubeClient.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
+	// 确保 Annotations 不为 nil
+	if node.Annotations == nil {
+		node.Annotations = make(map[string]string)
+	}
+
+	// 记录原状态
+	wasUnschedulable := node.Spec.Unschedulable
+	reasonKey := "crater.raids.io/unschedulable-reason"
+	operatorKey := "crater.raids.io/unschedulable-operator"
+
+	// 切换节点的 Unschedulable 状态
 	node.Spec.Unschedulable = !node.Spec.Unschedulable
+
+	// 添加或删除注解，记录操作原因和操作员
+	if wasUnschedulable {
+		// 恢复调度：删除原因和操作员注解
+		delete(node.Annotations, reasonKey)
+		delete(node.Annotations, operatorKey)
+	} else {
+		// 禁止调度：添加原因和操作员注解
+		if reason != "" {
+			node.Annotations[reasonKey] = reason
+		}
+		if operator != "" {
+			node.Annotations[operatorKey] = operator
+		}
+	}
+
 	_, err = nc.KubeClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	return err
 }
@@ -510,10 +559,15 @@ func (nc *NodeClient) DeleteNodeAnnotation(ctx context.Context, nodeName, key st
 }
 
 // AddNodeTaint 添加节点污点
-func (nc *NodeClient) AddNodeTaint(ctx context.Context, nodeName, key, value, effect string) error {
+func (nc *NodeClient) AddNodeTaint(ctx context.Context, nodeName, key, value, effect, reason, operator string) error {
 	node, err := nc.KubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return err
+	}
+
+	// 确保 Annotations 不为 nil
+	if node.Annotations == nil {
+		node.Annotations = make(map[string]string)
 	}
 
 	newTaint := corev1.Taint{
@@ -531,6 +585,16 @@ func (nc *NodeClient) AddNodeTaint(ctx context.Context, nodeName, key, value, ef
 
 	// 添加新的污点
 	node.Spec.Taints = append(node.Spec.Taints, newTaint)
+
+	// 如果是账户独占，记录原因和操作员
+	if strings.HasPrefix(key, "crater.raids.io/account") && effect == "NoSchedule" {
+		if reason != "" {
+			node.Annotations["crater.raids.io/taint-reason-occupied"] = reason
+		}
+		if operator != "" {
+			node.Annotations["crater.raids.io/taint-operator-occupied"] = operator
+		}
+	}
 
 	_, err = nc.KubeClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	return err
@@ -566,6 +630,12 @@ func (nc *NodeClient) DeleteNodeTaint(ctx context.Context, nodeName, key, value,
 
 	// 更新污点列表
 	node.Spec.Taints = newTaints
+
+	// 如果删除的是账户独占污点，删除对应的注解
+	if strings.HasPrefix(key, "crater.raids.io/account") && effect == "NoSchedule" && node.Annotations != nil {
+		delete(node.Annotations, "crater.raids.io/taint-reason-occupied")
+		delete(node.Annotations, "crater.raids.io/taint-operator-occupied")
+	}
 
 	_, err = nc.KubeClient.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	return err
