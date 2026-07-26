@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,8 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog/v2"
 	batch "volcano.sh/apis/pkg/apis/batch/v1alpha1"
 
@@ -298,7 +300,13 @@ func (mgr *GpuAnalysisMgr) ConfirmAndStopJob(c *gin.Context) {
 		return
 	}
 
-	// 3. 更新分析记录状态为“已确认”(ReviewStatusConfirmed)
+	// 3. Stop the job, treating an already deleted job as a successful no-op.
+	if err := mgr.stopJobByName(ctx, analysis.JobName); err != nil {
+		resputil.HandleError(c, err)
+		return
+	}
+
+	// 4. Mark the analysis only after the job is stopped or already absent.
 	if _, err := ga.WithContext(ctx).
 		Where(ga.ID.Eq(uint(id))).
 		Updates(model.GpuAnalysis{ReviewStatus: model.ReviewStatusConfirmed}); err != nil {
@@ -306,53 +314,48 @@ func (mgr *GpuAnalysisMgr) ConfirmAndStopJob(c *gin.Context) {
 		return
 	}
 
-	// 4. 调用复用的停止作业逻辑
-	// 注意：这里复用了 VolcanojobMgr 中的 StopJobByName 逻辑
-	if err := mgr.stopJobByName(ctx, analysis.JobName); err != nil {
-		resputil.Error(c, fmt.Sprintf("review confirmed but failed to stop job '%s': %v", analysis.JobName, err), resputil.ServiceError)
-		return
-	}
-
 	resputil.Success(c, fmt.Sprintf("Job '%s' stopped and analysis confirmed.", analysis.JobName))
 }
 
-// stopJobByName 是从 VolcanojobMgr.StopJobByName 复用（移植）过来的逻辑
-// 它负责更新数据库状态并删除 K8s 中的 Job 资源
+// stopJobByName updates the database state and deletes the Kubernetes Job.
 func (mgr *GpuAnalysisMgr) stopJobByName(ctx context.Context, jobName string) error {
 	j := query.Job
 
-	// 1. 获取数据库记录
+	// 1. Read the active database record. A missing or soft-deleted record means
+	// the job has already been removed and should not make this operation fail.
 	_, err := j.WithContext(ctx).Where(j.JobName.Eq(jobName)).First()
-	if err != nil {
-		return fmt.Errorf("job record not found in db: %w", err)
+	jobRecordExists := err == nil
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return bizerr.Internal.DatabaseError.Wrap(err, "get job record failed")
 	}
 
-	// 2. 尝试从 K8s 获取实体
+	// 2. Look up the Kubernetes resource. NotFound means it is already stopped.
 	job := &batch.Job{}
 	namespace := config.GetConfig().Namespaces.Job
 	err = mgr.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: namespace}, job)
 
 	exists := err == nil
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to get job from k8s: %w", err)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return bizerr.Internal.K8sServiceError.Wrap(err, "get job from Kubernetes failed")
 	}
 
-	// 3. 更新数据库状态为 Deleted
-	if _, err := j.WithContext(ctx).Where(j.JobName.Eq(jobName)).Updates(model.Job{
-		Status:             model.Deleted,
-		CompletedTimestamp: time.Now(),
-	}); err != nil {
-		return fmt.Errorf("failed to update job status in db: %w", err)
+	// 3. Update the database state only when an active record still exists.
+	if jobRecordExists {
+		if _, err := j.WithContext(ctx).Where(j.JobName.Eq(jobName)).Updates(model.Job{
+			Status:             model.Deleted,
+			CompletedTimestamp: time.Now(),
+		}); err != nil {
+			return bizerr.Internal.DatabaseError.Wrap(err, "update stopped job status failed")
+		}
 	}
 
-	// 4. 如果 K8s 中存在该 Job，则删除它（OwnerReference 会处理关联的 Pod/Svc/Ingress）
+	// 4. Delete the Kubernetes Job when present. OwnerReferences clean up related resources.
 	if exists {
-		// PropagationPolicy: Background 是默认行为，但显式写出更清晰
 		deleteOptions := &client.DeleteOptions{}
 		if err := mgr.client.Delete(ctx, job, deleteOptions); err != nil {
-			// 如果删除时发现由于某种原因已经被删除了，忽略错误
-			if !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to delete job from k8s: %w", err)
+			// Ignore a concurrent deletion.
+			if !k8serrors.IsNotFound(err) {
+				return bizerr.Internal.K8sServiceError.Wrap(err, "delete job from Kubernetes failed")
 			}
 		}
 	}
