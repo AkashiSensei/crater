@@ -25,6 +25,8 @@ Crater CLI 采用文档驱动开发。修改代码前，请先确认你触及的
 
 跨命令规则和共享实现约束见 [docs/SPEC.md](docs/SPEC.md)，用户可见命令契约见 [docs/COMMANDS.md](docs/COMMANDS.md)，包边界和请求流程见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。如果修改 Agent Skills，遵守 `docs/SPEC.md` 中的 Skills 规则。
 
+CLI 所用 API 变化时，须使用根贡献文档的 [CLI / 后端 API 兼容版本](../docs/zh-CN/CONTRIBUTING.md#cli--后端-api-兼容版本) 决策表。只有 API 契约本身发生变化时，后端和 CLI 的 `APIVersion` 才同步更新。CLI 开始强依赖契约中已有能力时，`APIVersion` 不变；仅在没有回退路径时，才将 `MinSupportedBackendAPIVersion` 提升至首次提供该能力的版本。PR 描述或验证记录必须写明这两项决策；不调整时也要说明原因。
+
 需要手动试用 CLI 时，先构建本地二进制：
 
 ```bash
@@ -32,6 +34,8 @@ make build
 ```
 
 该命令会执行 `go mod tidy` 并构建本地 `./crater` 二进制。
+
+正式发布或打包构建应传入 CLI 产品版本，例如 `make build APP_VERSION=0.4.0`；该值会写入标准 `User-Agent` Header。本地构建默认为 `dev`。
 
 涉及用户可见 CLI 行为时，要求开发者按 `docs/COMMANDS.md` 和 `docs/SPEC.md` 手动执行关键命令路径。Agent 运行的测试可以降低风险，但不能替代开发者对平台契约的人工验证。
 
@@ -80,3 +84,4 @@ make pre-commit-check
 - 如果更新了 golden 文件，它们由 `make snapshot-update` 生成，并且已经人工审查。
 - README 面向普通用户，不包含内部开发指引。
 - 如果修改了 Agent Skills，它们遵守 `docs/SPEC.md`，只说明如何使用已有 CLI 契约，不单独定义新的命令行为。
+- CLI 所用 API 的变更已明确记录当前版本和最低后端版本的决策。

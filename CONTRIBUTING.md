@@ -338,6 +338,27 @@ Before opening or updating a PR, run the relevant local review path for the chan
 
 After creating the PR, check workflow status. The PR may need multiple rounds of iteration with Copilot review or human review. An Agent may fetch the PR link itself or ask the developer for it, inspect review comments, judge whether each suggestion is correct and worth changing, then propose a modification plan. Do not apply review-driven code changes until the developer has discussed and approved the plan.
 
+## CLI / Backend API Compatibility Versions
+
+This contract applies only to APIs consumed by the independently distributed CLI. The administrator-deployed frontend is outside its scope.
+
+- Backend constants live in `backend/internal/version/api.go`; CLI constants live in `cli/internal/version/version.go`.
+- `APIVersion` is one shared, monotonically increasing API-contract counter. Backend and CLI must carry the same current value after an API contract consumed by the CLI changes.
+- Version `1` is the first published contract. Value `0` must not be published as a supported contract. If a handshake explicitly reports `0`, the CLI treats it as a pre-contract legacy version so it can explain which minimum-version check fails; a missing version field or a negative value remains invalid or unknown.
+- Each side independently owns the minimum peer it needs: the backend owns `MinSupportedCLIAPIVersion`; the CLI owns `MinSupportedBackendAPIVersion`. They need not be equal and must not be raised merely because `APIVersion` changes.
+- Raise a minimum only when that side cannot complete the affected operation with an older peer and no fallback remains. Set it to the first peer API version that provides the required contract.
+- Every PR changing an API used by the CLI must state the version decision in its description or verification notes, including “unchanged” with a reason.
+
+| Change | `APIVersion` | Minimum peer version |
+|--------|--------------|----------------------|
+| Backend implementation only, frontend-only API, or CLI-local behavior | Unchanged | Unchanged |
+| Add an endpoint, field, or optional semantic consumed by the CLI | Increment on backend and CLI | Usually unchanged |
+| Change/remove a CLI-consumed path, method, required field, field type, meaning, authorization requirement, or response structure | Increment on backend and CLI | Raise only on the side that cannot support the older peer |
+| CLI begins requiring a capability already present in the backend API contract | Unchanged | If there is no fallback, raise the CLI's minimum backend version to the API version that first provided the capability |
+| Add a CLI fallback or keep an existing capability optional | Unchanged unless the backend API contract itself changes | Do not raise the minimum |
+
+The CLI sends `User-Agent: crater-cli/<product-version>` and `X-Crater-API-Version: <APIVersion>`. These headers are untrusted diagnostic metadata: the backend must not use them for authorization, compatibility decisions, response-shape switching, or mandatory rejection. Only the explicit `crater compatibility` diagnostic calls public `GET /api/cli/compatibility`; ordinary business commands do not perform a handshake and must not be gated by compatibility results.
+
 ## Cross-Module Rules
 
 - **Front/back identity consistency**: Admin views call admin APIs only (URL / function name carries the `admin` prefix); regular users call user APIs. Both sides must correspond.

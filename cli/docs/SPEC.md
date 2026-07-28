@@ -83,6 +83,17 @@
 - 新增或修改后端支持的命令时，必须确认目标后端版本真实支持对应 API 和语义。不要新增后端不会消费的 flag、query 或 body 字段；展示给用户的信息必须来自有效后端响应或已写入文档的本地状态来源，不能基于未使用字段或本地猜测。
 - 仅在本地开发或自测需要**伪造传输层结果**，或让成功快照访问由当前测试进程管理的 loopback fixture 时，使用环境变量 `CRATER_TEST_SANDBOX_HTTP`（如 `timeout` / `error404` / `passthrough`）；**允许取值与行为以架构文档「网络通信」节为准**。契约验证与前后端联调须使用真实服务或后端提供的 mock，不得把测试 fixture 的响应当作平台契约。
 
+### CLI / 后端 API 版本握手
+
+这套机制只对齐用户自行管理的 CLI 与运维团队部署的后端，不包含随平台部署的前端。版本更新决策以根 [CONTRIBUTING.md](../../CONTRIBUTING.md#cli--backend-api-compatibility-versions) 为准。
+
+- CLI 的 `APIVersion` 与 `MinSupportedBackendAPIVersion` 定义在 `internal/version/version.go`；它们分别表示 CLI 编译时所依据的共享契约版本、CLI 能支持的最低后端契约版本。
+- 正式 API 契约从 `1` 开始，`0` 不得作为受支持的正式契约发布。握手接口明确返回 `0` 时，CLI 将其作为早于正式契约的旧版本参与最低版本比较，以便输出具体的不兼容条件；字段缺失或负数仍表示未知或非法。
+- 所有经统一客户端发出的请求都带 `User-Agent: crater-cli/<product-version>` 和 `X-Crater-API-Version: <APIVersion>`。两者仅用于日志与诊断，不能作为服务端兼容性判断、鉴权或强制拦截依据。
+- 只有显式执行 `crater compatibility` 时才调用一次公开的 `GET /api/cli/compatibility`。响应提供后端 `apiVersion` 与 `minSupportedCliApiVersion`，以及产品版本、7 位短提交 SHA、构建类型和 UTC 构建时间；CLI 只使用两个 API 版本字段检查当前 CLI 是否低于后端最低要求、当前后端是否低于 CLI 最低要求。构建信息仅用于展示和排障，缺失时显示未知，不得影响兼容性结论。
+- 普通业务命令不得自动调用握手接口。诊断命令收到 404 时将其视为旧后端尚未提供握手接口，返回稳定错误 `ERR_API_VERSION_MISMATCH`，同时在 context 保留原始 HTTP 404；其他 HTTP 错误、网络失败或无效响应仍保留对应真实错误。该 404 映射只属于 `crater compatibility`，不改变其他命令的错误语义。这些结果只用于主动检查或排障，不改变其他命令的执行。
+- 不允许增加逐请求拦截中间件、HTTP 426 或按版本切换响应结构；具体业务接口仍按其真实响应决定成功或失败。
+
 ---
 
 ## Tab 补全（开发者约定）
@@ -246,7 +257,7 @@
 
 ### `api_error` 与 HTTP：公共 `Code` 档位
 
-凡 `Category == api_error` 且语义来自**已收到的** HTTP 响应时，`Code` 必须按下表与状态码档位一致，以便跨命令对脚本暴露同一套档位。`usage_error`、`system_error` 等不必带 `_401` 这类后缀。无 HTTP 结果时不得使用带 HTTP 后缀的 `Code`，不得伪造 `http_status`；超时、DNS、连接失败等用 `pkg/errorcodes/codes.go` 中的非 HTTP 后缀码。
+凡 `Category == api_error` 且语义来自**已收到的** HTTP 响应时，`Code` 通常必须按下表与状态码档位一致，以便跨命令对脚本暴露同一套档位。唯一的领域例外是 `crater compatibility`：握手接口 404 表示旧后端尚未支持版本协议，因此顶层使用 `ERR_API_VERSION_MISMATCH`，但 context 仍须保留 `http_status: 404`、原始 `msg` 与专用 `reason`；其他命令仍映射为 `ERR_NOT_FOUND_404`。`usage_error`、`system_error` 等不必带 `_401` 这类后缀。无 HTTP 结果时不得使用带 HTTP 后缀的 `Code`，不得伪造 `http_status`；超时、DNS、连接失败等用 `pkg/errorcodes/codes.go` 中的非 HTTP 后缀码。
 
 Crater 后端 API 错误信封为 `code`、`data`、`msg`。CLI 不应依赖后端业务错误常量名来决定顶层 `Code`，顶层 `Code` 仍按 HTTP 档位稳定映射；但 CLI 必须保留后端错误事实，让人类输出能说明失败原因，`--json` 输出能支持脚本和管理员排查。除非命令有更清晰的领域化表达，否则不要用“操作失败”这类泛化文案覆盖后端 `msg`。
 

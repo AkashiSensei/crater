@@ -28,6 +28,7 @@ applyTo: "backend/**,frontend/**"
 - **前端配置说明**: 不易理解的输入项、开关或配置项须在标签 / 标题旁提供帮助图标和 hover tooltip，解释作用、适用场景、关键机制或影响。
 - **前端截图**: 前端 / UI 改动的 PR 必须附相应界面截图，展示受影响页面、角色、关键状态或操作结果。
 - **文档与配置同步**: 新功能或重大变更同步 `website/` 文档；配置结构变更同步 `charts/`，提升 `charts/crater/Chart.yaml` 的 `version` 与 `appVersion`，并保持二者为完全相同的值，同时同步 `charts/crater/README.md`；前后端 API 变化影响 Chart 应用契约时按 `charts/CONTRIBUTING.md` 提升 minor。
+- **CLI API 兼容版本**: 修改 CLI 会调用的后端 API 时，必须按根 `CONTRIBUTING.md` 记录版本决定：只有 API 契约本身变化时，后端与 CLI 的共享 `APIVersion` 才同步提升；CLI 开始依赖契约中已有能力时当前版本不变，最低支持版本只在没有回退且实际不再兼容旧版对方时独立提升至该能力首次出现的版本。诊断 Header 不得用于鉴权、强制拦截或响应分流；普通业务命令不得自动握手，兼容性检查只由显式 `crater compatibility` 命令执行。
 
 ## 优化建议 (Optimization Suggestions)
 
