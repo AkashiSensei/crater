@@ -16,6 +16,8 @@
 - `--help, -h`:
   - **行为**: 显示当前命令或子命令的帮助信息。
 
+CLI 发出的平台请求带 `User-Agent: crater-cli/<product-version>` 与 `X-Crater-API-Version: <api-version>`，仅供平台诊断，不代表后端会据此改变或拒绝请求。普通业务命令不自动执行 API 兼容性握手。
+
 ### 公共列表分页 (List Pagination)
 
 采用公共列表分页契约的命令会显式提供以下选项；未提供这些选项的低基数列表不受本节影响：
@@ -46,8 +48,53 @@
        "context": { "key": "value" } 
      }
      ```
-   - **错误码定义**: 以 `pkg/errorcodes/codes.go` 为准。**`api_error`** 的 **`code`** 须与 **HTTP** 显式对应，命名形如 **`ERR_NOT_FOUND_404`**、**`ERR_SERVER_INTERNAL_5XX`** 等，完整约定见 **[SPEC.md](./SPEC.md)**「命令结果：错误与成功」中 `api_error` 与 HTTP 小节。
+   - **错误码定义**: 以 `pkg/errorcodes/codes.go` 为准。**`api_error`** 的 **`code`** 通常须与 **HTTP** 显式对应，命名形如 **`ERR_NOT_FOUND_404`**、**`ERR_SERVER_INTERNAL_5XX`** 等；`crater compatibility` 对握手接口 404 的领域化映射见本命令章节。完整约定见 **[SPEC.md](./SPEC.md)**「命令结果：错误与成功」中 `api_error` 与 HTTP 小节。
    - **退出码**: 出错时非零退出；具体数值由 `Execute` 根据 `*clierror.Error` 的 `category` 映射（实现为 `pkg/errorcodes.ExitCodeForCategory`：`usage_error`→2，`cancelled`→3，`api_error`→4，`system_error`→5；非 `*clierror.Error` 的错误→1）。命令实现里不必自行 `os.Exit`。
+
+---
+
+## API 兼容性诊断 (compatibility)
+
+### `crater compatibility`
+
+- **描述**：显式检查当前 CLI 与指定 Crater 平台是否支持对方的 API 版本；请求无需登录凭据，也不会由其他命令自动执行，但仍必须能够确定目标平台地址。
+- **位置参数**：无；出现任何位置参数均返回 `usage_error`。
+- **选项**：
+  - `--platform, -p <URL>`（条件必填）：待检查的平台地址；不提供时使用当前激活身份保存的平台地址。若没有当前激活身份，则必须显式提供该选项。
+- **处理逻辑**：
+  - 未提供 `--platform` 且没有当前激活身份时，不发起 HTTP 请求，返回 `usage_error` + `ERR_MISSING_REQUIRED_FLAG`，进程退出码为 `2`；提示用户通过 `--platform <URL>` 指定目标平台，并明确该操作无需登录。
+  - 调用公开的 `GET /api/cli/compatibility` 一次，并比较 CLI / 后端各自的当前 API 版本与最低支持的对方版本。
+  - 双方均满足最低版本时成功；默认模式输出平台、状态、双方 API 版本，以及后端产品版本、7 位短提交 SHA、构建类型和 UTC 构建时间。
+  - 后端构建信息仅用于诊断和展示，不参与 API 兼容性判断。兼容性接口仅返回 API 版本字段的早期实现仍可使用；缺失的后端构建字段显示为“未知”，不会因此把响应判定为非法。
+  - 明确不兼容时返回 `api_error` + `ERR_API_VERSION_MISMATCH`，进程退出码为 `4`。人类可读错误按“具体情况 / 版本信息 / 使用建议”分段展示：具体指出哪个最低版本条件不满足，列出 CLI 产品版本、CLI / 后端 API 版本和双方最低支持版本，并说明用户仍可继续使用 CLI，但部分操作可能因 API 契约不一致而失败。
+  - 握手响应明确包含版本字段但值为 `0` 时，将 `0` 视为早于首个正式契约的旧版本并参与比较，而不是泛化为“兼容性信息无效”。例如后端明确报告 `apiVersion: 0` 且 CLI 最低支持后端版本为 `1` 时，按“后端版本过旧”输出上述完整诊断，并在最后的排查手段中建议降级 CLI。字段缺失或负数才视为非法响应。
+  - 版本诊断只提示潜在风险，不把后续业务错误直接归因于 API 版本。实际操作失败时应先根据该操作自己的报错排查命令输入、本地配置、认证、网络连接和平台状态等更常见原因，也应考虑 CLI 自身（尤其开发版本）的缺陷。只有排除这些原因且仍有证据指向 API 契约不兼容时，才把调整 CLI 版本作为最后的排查手段。
+  - 最后的 CLI 版本调整按检测方向决定：CLI API 版本低于后端最低要求时尝试升级 CLI；后端 API 版本低于 CLI 最低要求时尝试降级 CLI；两项限制同时不满足时分别解释升级和降级可解决的约束，并提示向平台管理员确认该部署对应的 CLI 版本。
+  - 该接口返回 HTTP 404 时，视为目标后端早于当前 CLI 的兼容性检查命令：返回 `api_error` + `ERR_API_VERSION_MISMATCH`，后端版本显示为未知。排除更常见原因后，最后才建议尝试降级 CLI 或联系平台管理员。原始 `http_status: 404` 与响应 `msg` 保留在错误 context 中。此特殊映射只适用于本命令，不改变其他命令的 404 语义。
+  - 其他 HTTP 错误、网络失败或响应非法时保留实际错误，不伪装成版本不兼容。
+  - 该公开接口不读取或发送已保存 Token；当前未登录或没有激活身份时，可通过 `--platform` 指定目标平台后检查。
+- **`--json` 成功体的 `data`**：仅包含 `compatibility`，其结构为：
+  ```json
+  {
+    "platform_url": "https://crater.example.com",
+    "status": "compatible",
+    "cli": {
+      "product_version": "1.0.0",
+      "api_version": 1,
+      "min_supported_backend_api_version": 1
+    },
+    "backend": {
+      "product_version": "1.1.1",
+      "short_commit_sha": "f42b0c2",
+      "build_type": "release",
+      "build_time": "2026-07-26T08:30:00Z",
+      "api_version": 1,
+      "min_supported_cli_api_version": 1
+    }
+  }
+  ```
+- **`--json` 不兼容错误的 `context`**：`platform_url`、`status`、`cli_product_version`、`cli_api_version`、`cli_min_supported_backend_api_version`、`backend_product_version`、`backend_short_commit_sha`、`backend_build_type`、`backend_build_time`、`backend_api_version`、`backend_min_supported_cli_api_version`。接口明确报告的 `0` 保留为数值 `0`，并按最低版本条件产生对应状态。缺失的构建信息使用空字符串表示未知，不参与兼容性判断。若握手接口返回 404，无法获知的后端 API 版本字段也以 `0` 占位、构建字段为空字符串，但 `status` 为 `unknown`，并额外包含 `reason: "compatibility_endpoint_not_found"`、`http_status: 404` 与原始 `msg`；因此调用方应结合 `status` / `reason` 区分“明确报告的旧版本 0”和“未知值占位 0”。
+- **状态**：[x] Completed
 
 ---
 

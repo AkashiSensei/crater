@@ -84,6 +84,7 @@ Common targets:
 - **Route by identity**: admin APIs register to the `Admin` route; user APIs register to the `Protected` route. Do not mix them.
 - **Name by identity**: admin API functions take an `Admin` prefix; user API functions take a `User` prefix.
 - **Document external APIs**: changing an external API must update its `swag` annotations; if no annotation change is needed, say so explicitly.
+- **Decide CLI compatibility versions**: for every API consumed by the CLI, apply the root [CLI / Backend API Compatibility Versions](../CONTRIBUTING.md#cli--backend-api-compatibility-versions) rules. Update `internal/version/api.go` and the CLI constants together when the shared contract counter changes; raise `MinSupportedCLIAPIVersion` only when this backend can no longer serve the older CLI without a fallback. Never gate a request on the diagnostic version header.
 - **Keep handlers thin**: handlers dispatch requests and responses. Move complex business logic to the Service layer.
 
 ## Job Template Compatibility
@@ -151,6 +152,7 @@ The repo root `.vscode/launch.json` provides a "Backend Debug Server" configurat
 
 - Run the relevant `make` target, usually `make pre-commit-check` for final checks.
 - If API behavior changed, confirm `swag` annotations, frontend usage, CLI behavior, and error presentation are aligned.
+- If an API used by the CLI changed, record whether `APIVersion` and `MinSupportedCLIAPIVersion` changed and why.
 - If job template payloads changed, confirm the versioning / compatibility decision.
 - If database schema changed, include migration and generated code.
 - Record exact checks and any developer manual verification for the PR description.

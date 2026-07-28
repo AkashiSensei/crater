@@ -11,6 +11,8 @@ RESET := \033[0m
 
 # 变量定义
 BINARY_NAME := crater
+APP_VERSION ?= dev
+VERSION_LDFLAGS := -X github.com/raids-lab/crater/cli/internal/version.ProductVersion=$(APP_VERSION)
 
 .PHONY: help
 help: ## 显示帮助信息
@@ -25,7 +27,7 @@ help: ## 显示帮助信息
 .PHONY: build
 build: tidy ## 编译生成 crater 可执行文件
 	@echo "$(BLUE)🏗️  正在构建 $(BINARY_NAME)...$(RESET)"
-	@go build -o $(BINARY_NAME) .
+	@go build -ldflags="$(VERSION_LDFLAGS)" -o $(BINARY_NAME) .
 	@echo "$(GREEN)✅ 构建完成: ./$(BINARY_NAME)$(RESET)"
 
 .PHONY: clean
@@ -66,7 +68,8 @@ UNIT_TEST_PKGS := \
 	./internal/completion \
 	./internal/output \
 	./internal/state \
-	./internal/testenv
+	./internal/testenv \
+	./internal/version
 
 .PHONY: unit-test
 unit-test: ## 运行 cli 的所有单元测试（排除 ./test/snapshots）

@@ -51,15 +51,18 @@ CLI 与 Crater 平台之间的请求、响应解析与传输层异常，集中�
 
 - `paths.go`：仅 path 常量（含版本或模块前缀），避免在方法中散落魔法字符串。
 - `client.go`：`Client`、`NewClient`、`SetToken`、`Response[T]`；读取 `CRATER_TEST_SANDBOX_HTTP` 并在 `NewClient` 内对 req 客户端注册 Transport 拦截（见下小节）。
+- `compatibility.go`：调用公开的 `/api/cli/compatibility` 并解包版本范围与可选后端构建信息；`internal/version` 保存 CLI 当前 API 版本、最低后端 API 版本与产品版本，统一客户端据此写入 `User-Agent` 和 `X-Crater-API-Version`。兼容性判断只读取 API 版本字段；后端产品版本、短提交 SHA、构建类型和构建时间仅用于诊断展示。
 - 按域文件（如 `auth.go`）：该域请求/响应 DTO、对外小接口（如 `AuthClient`）、`NewXxxClient` 及 `(*Client)` 上的 HTTP 方法；测试可注入假实现而不必连网。
 
 `cmd` 将 `RequestError` / `NetworkError` 等映射为 `*clierror.Error`（见 `cmd/errors.go` 的 `cliErrFromAPI` 与 `apiCodeForHTTP`）；`internal/api` 不打印、不决定 `--json`。
+
+只有 `cmd/compatibility.go` 实现的显式 `crater compatibility` 命令调用版本握手接口，并使用独立短超时。该命令在命令层把接口 404 特殊映射为 `ERR_API_VERSION_MISMATCH`，同时保留底层 HTTP context；`internal/api` 仍按普通 `RequestError` 表达 404，因此其他命令不受影响。普通业务命令和登录命令不自动握手；统一客户端只负责在所有请求上携带诊断 Header。诊断结果不会改变接口响应，也不会成为其他请求的门禁。
 
 ### 传输层模拟（`CRATER_TEST_SANDBOX_HTTP`）
 
 **目的**：在不连接外部真实网络的前提下，快速走通 CLI 的错误分支，或让成功快照访问由当前测试进程管理的 loopback fixture。**不**替代 OpenAPI 契约或联调。
 
-**实现要点**：`NewClient` 创建 req 客户端后调用 `applyHTTPSim`，读取 `CRATER_TEST_SANDBOX_HTTP` 并按取值在 Transport 上 `WrapRoundTripFunc`。`error404` 和 `timeout` 对**所有**经该客户端发出的请求返回同一种伪造结果（与 path 无关）；`passthrough` 则保留真实 RoundTripper，但在连接前拒绝非 loopback host。
+**实现要点**：`NewClient` 创建 req 客户端后调用 `applyHTTPSim`，读取 `CRATER_TEST_SANDBOX_HTTP` 并按取值在 Transport 上 `WrapRoundTripFunc`。`error404` 和 `timeout` 对**所有**经该客户端发出的请求返回同一种伪造结果（与 path 无关）；`passthrough` 保留真实 RoundTripper，但在连接前拒绝非 loopback host；兼容性模式只为兼容性接口返回对应结果。
 
 | 取值 | 行为 |
 |------|------|
@@ -67,6 +70,10 @@ CLI 与 Crater 平台之间的请求、响应解析与传输层异常，集中�
 | `error404` / `404` | 返回 HTTP 404 + 固定 JSON body。 |
 | `timeout` / `hang` | RoundTrip 直接返回超时类错误（不睡眠）。 |
 | `passthrough` | 仅允许请求 `localhost` 或 loopback IP，将请求交给下一层 RoundTripper；非 loopback host 在传输前失败。 |
+| `compatibility-compatible` | 兼容性接口返回双方兼容；用于诊断命令成功快照。 |
+| `compatibility-cli-too-old` | 兼容性接口返回“CLI 版本过旧”；用于诊断命令不兼容快照。 |
+| `compatibility-backend-zero` | 兼容性接口明确返回 `0/0`；用于验证前契约后端按“后端版本过旧”输出完整诊断，而不是被当成字段缺失。 |
+| `compatibility-unavailable` | 兼容性接口返回旧后端常见的纯文本 404；用于验证 JSON 解码失败不会遮盖真实 HTTP 错误。 |
 
 成功快照的调用链如下：
 

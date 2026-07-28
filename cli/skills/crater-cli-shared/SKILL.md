@@ -1,7 +1,7 @@
 ---
 name: crater-cli-shared
-version: 1.1.0
-description: "Crater CLI 共享基础：安全调用 crater 命令的通用规则，包括可执行文件选择、全局选项、列表分页、--json、--no-interactive、--help、错误输出、退出码、错误场景判断、敏感信息处理，以及执行会修改用户环境的命令前的确认规则。处理任何 Crater CLI 操作前使用。"
+version: 1.1.1
+description: "Crater CLI 共享基础：安全调用 crater 命令的通用规则，包括可执行文件选择、全局选项、列表分页、--json、--no-interactive、--help、错误输出、退出码、错误场景判断、API 兼容性诊断、敏感信息处理，以及执行会修改用户环境的命令前的确认规则。处理任何 Crater CLI 操作前使用。"
 metadata:
   requires:
     bins: ["crater"]
@@ -30,6 +30,8 @@ metadata:
 ## 错误排查
 
 错误分类、退出码与 HTTP 错误码约定见 [`references/crater-cli-error-handling.md`](references/crater-cli-error-handling.md)。
+
+API 版本不一致是命令失败的低概率原因。先根据原命令的错误排查参数、配置、认证、网络、权限、平台状态和 CLI 自身缺陷；只有常见原因无法解释问题，或现象明显指向 API 契约差异时，才运行 `crater compatibility` 与目标后端握手。兼容性结果的简要解读和后续处置也见上述错误排查 reference。
 
 ## 安全边界
 

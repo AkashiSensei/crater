@@ -84,6 +84,7 @@ make run
 - **按身份分路由**：管理员接口注册到 `Admin` 路由，用户接口注册到 `Protected` 路由，二者不可混用。
 - **按身份命名**：管理员接口函数名加 `Admin` 前缀，用户接口函数名加 `User` 前缀。
 - **同步外部 API 文档**：变更外部 API 必须同步 `swag` 注释；若判断无需修改注释，要明确说明。
+- **判断 CLI 兼容版本**：每个 CLI 会调用的 API 都须遵守根贡献文档的 [CLI / 后端 API 兼容版本](../docs/zh-CN/CONTRIBUTING.md#cli--后端-api-兼容版本) 规则。共享契约计数器变化时同步更新 `internal/version/api.go` 和 CLI 常量；只有后端在没有回退路径时无法再服务旧 CLI，才提升 `MinSupportedCLIAPIVersion`。不得依据诊断版本 Header 拦截请求。
 - **保持 Handler 瘦身**：Handler 只负责请求分发与响应，复杂业务逻辑放到 Service 层。
 
 ## 作业模板兼容性
@@ -151,6 +152,7 @@ make build-storage
 
 - 运行相关 `make` target，最终检查通常使用 `make pre-commit-check`。
 - 如果 API 行为变化，确认 `swag` 注释、前端调用、CLI 行为和错误展示已对齐。
+- 如果 CLI 所用 API 变化，记录 `APIVersion` 与 `MinSupportedCLIAPIVersion` 是否调整及原因。
 - 如果作业模板 payload 变化，确认版本和兼容性决策。
 - 如果数据库结构变化，包含迁移和生成代码。
 - 记录实际检查和开发者人工验证，供 PR 描述使用。

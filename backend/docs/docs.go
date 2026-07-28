@@ -184,6 +184,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/cli/compatibility": {
+            "get": {
+                "description": "返回后端当前 CLI API 版本、最低支持的 CLI API 版本及构建信息；构建信息不参与兼容性判断，该接口只提供诊断信息，不拦截业务请求",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CLI"
+                ],
+                "summary": "获取 CLI API 兼容信息",
+                "responses": {
+                    "200": {
+                        "description": "CLI API 兼容信息",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_raids-lab_crater_internal_resputil.Response-internal_handler_CLICompatibilityInfo"
+                        }
+                    }
+                }
+            }
+        },
         "/dataset/source-logo/{sourceId}": {
             "get": {
                 "description": "返回平台缓存的来源 Logo，不要求浏览器访问外部模型站点",
@@ -11135,6 +11155,21 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_raids-lab_crater_internal_resputil.Response-internal_handler_CLICompatibilityInfo": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "依然保持 int (ErrorCode) 类型",
+                    "type": "integer"
+                },
+                "data": {
+                    "$ref": "#/definitions/internal_handler.CLICompatibilityInfo"
+                },
+                "msg": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_raids-lab_crater_internal_resputil.Response-internal_handler_CheckResp": {
             "type": "object",
             "properties": {
@@ -12123,6 +12158,29 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "ldapHelp": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.CLICompatibilityInfo": {
+            "type": "object",
+            "properties": {
+                "apiVersion": {
+                    "type": "integer"
+                },
+                "appVersion": {
+                    "type": "string"
+                },
+                "buildTime": {
+                    "type": "string"
+                },
+                "buildType": {
+                    "type": "string"
+                },
+                "minSupportedCliApiVersion": {
+                    "type": "integer"
+                },
+                "shortCommitSHA": {
                     "type": "string"
                 }
             }

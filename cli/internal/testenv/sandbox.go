@@ -31,7 +31,9 @@ func SandboxHTTPMode() string {
 
 	mode := strings.ToLower(raw)
 	switch mode {
-	case "", "timeout", "hang", "error404", "404", "passthrough":
+	case "", "timeout", "hang", "error404", "404", "passthrough",
+		"compatibility-compatible", "compatibility-cli-too-old",
+		"compatibility-backend-zero", "compatibility-unavailable":
 		// ok ("" already handled above)
 	default:
 		if SandboxEnabled() {

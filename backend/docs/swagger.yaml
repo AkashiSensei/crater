@@ -626,6 +626,16 @@ definitions:
       msg:
         type: string
     type: object
+  github_com_raids-lab_crater_internal_resputil.Response-internal_handler_CLICompatibilityInfo:
+    properties:
+      code:
+        description: 依然保持 int (ErrorCode) 类型
+        type: integer
+      data:
+        $ref: '#/definitions/internal_handler.CLICompatibilityInfo'
+      msg:
+        type: string
+    type: object
   github_com_raids-lab_crater_internal_resputil.Response-internal_handler_CheckResp:
     properties:
       code:
@@ -1284,6 +1294,21 @@ definitions:
       ldapAlias:
         type: string
       ldapHelp:
+        type: string
+    type: object
+  internal_handler.CLICompatibilityInfo:
+    properties:
+      apiVersion:
+        type: integer
+      appVersion:
+        type: string
+      buildTime:
+        type: string
+      buildType:
+        type: string
+      minSupportedCliApiVersion:
+        type: integer
+      shortCommitSHA:
         type: string
     type: object
   internal_handler.CheckResp:
@@ -2980,6 +3005,19 @@ paths:
       summary: 获取后端用户认证模式
       tags:
       - Auth
+  /cli/compatibility:
+    get:
+      description: 返回后端当前 CLI API 版本、最低支持的 CLI API 版本及构建信息；构建信息不参与兼容性判断，该接口只提供诊断信息，不拦截业务请求
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: CLI API 兼容信息
+          schema:
+            $ref: '#/definitions/github_com_raids-lab_crater_internal_resputil.Response-internal_handler_CLICompatibilityInfo'
+      summary: 获取 CLI API 兼容信息
+      tags:
+      - CLI
   /dataset/source-logo/{sourceId}:
     get:
       description: 返回平台缓存的来源 Logo，不要求浏览器访问外部模型站点

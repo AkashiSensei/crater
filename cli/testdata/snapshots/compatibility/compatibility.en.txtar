@@ -1,0 +1,246 @@
+# Crater CLI snapshot bundle (txtar). Regenerate: make snapshot-update (or UPDATE_SNAPSHOTS=1 go test ./test/snapshots/...)
+-- en/01-compatible-active-platform-nojson/argv --
+crater compatibility --no-interactive
+-- en/01-compatible-active-platform-nojson/exit --
+0
+-- en/01-compatible-active-platform-nojson/stdout --
+Platform: https://example.invalid
+Status: compatible
+CLI product version: dev
+CLI API version: 1
+CLI minimum backend API version: 1
+Backend product version: v1.1.1
+Backend short commit SHA: f42b0c2
+Backend build type: release
+Backend build time: 2026-07-26T08:30:00Z
+Backend API version: 1
+Backend minimum CLI API version: 1
+-- en/01-compatible-active-platform-nojson/stderr --
+-- en/02-compatible-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- en/02-compatible-json/exit --
+0
+-- en/02-compatible-json/stdout --
+{
+  "data": {
+    "compatibility": {
+      "platform_url": "https://example.invalid",
+      "status": "compatible",
+      "cli": {
+        "product_version": "dev",
+        "api_version": 1,
+        "min_supported_backend_api_version": 1
+      },
+      "backend": {
+        "product_version": "v1.1.1",
+        "short_commit_sha": "f42b0c2",
+        "build_type": "release",
+        "build_time": "2026-07-26T08:30:00Z",
+        "api_version": 1,
+        "min_supported_cli_api_version": 1
+      }
+    }
+  },
+  "status": "OK"
+}
+-- en/02-compatible-json/stderr --
+-- en/03-incompatible-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- en/03-incompatible-nojson/exit --
+4
+-- en/03-incompatible-nojson/stdout --
+-- en/03-incompatible-nojson/stderr --
+Error:
+  CLI and platform API versions are not compatible.
+  
+  Platform: https://example.invalid
+  Situation:
+    - The CLI API version (1) is lower than the backend minimum supported CLI API version (2).
+  
+  Versions:
+    CLI product version: dev
+    CLI API version: 1
+    CLI minimum backend API version: 1
+    Backend product version: v1.1.1
+    Backend short commit SHA: f42b0c2
+    Backend build type: release
+    Backend build time: 2026-07-26T08:30:00Z
+    Backend API version: 1
+    Backend minimum CLI API version: 2
+  
+  Guidance:
+    - You can continue using the CLI, but some operations may fail because the API contracts may differ.
+    - If an operation fails, first investigate its reported error and more common causes such as command input, local configuration, authentication, network connectivity, or platform state. The CLI itself, especially a development build, may also contain a bug.
+    - Only after those causes have been ruled out and API incompatibility still appears likely, try upgrading the CLI to a version compatible with the platform, or contact the platform administrator for support.
+-- en/04-incompatible-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- en/04-incompatible-json/exit --
+4
+-- en/04-incompatible-json/stdout --
+-- en/04-incompatible-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_API_VERSION_MISMATCH",
+  "message": "CLI and platform API versions are not compatible.\n\nPlatform: https://example.invalid\nSituation:\n  - The CLI API version (1) is lower than the backend minimum supported CLI API version (2).\n\nVersions:\n  CLI product version: dev\n  CLI API version: 1\n  CLI minimum backend API version: 1\n  Backend product version: v1.1.1\n  Backend short commit SHA: f42b0c2\n  Backend build type: release\n  Backend build time: 2026-07-26T08:30:00Z\n  Backend API version: 1\n  Backend minimum CLI API version: 2\n\nGuidance:\n  - You can continue using the CLI, but some operations may fail because the API contracts may differ.\n  - If an operation fails, first investigate its reported error and more common causes such as command input, local configuration, authentication, network connectivity, or platform state. The CLI itself, especially a development build, may also contain a bug.\n  - Only after those causes have been ruled out and API incompatibility still appears likely, try upgrading the CLI to a version compatible with the platform, or contact the platform administrator for support.",
+  "context": {
+    "backend_api_version": 1,
+    "backend_build_time": "2026-07-26T08:30:00Z",
+    "backend_build_type": "release",
+    "backend_min_supported_cli_api_version": 2,
+    "backend_product_version": "v1.1.1",
+    "backend_short_commit_sha": "f42b0c2",
+    "cli_api_version": 1,
+    "cli_min_supported_backend_api_version": 1,
+    "cli_product_version": "dev",
+    "platform_url": "https://example.invalid",
+    "status": "cli_maybe_too_old"
+  }
+}
+-- en/05-endpoint-unavailable-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- en/05-endpoint-unavailable-nojson/exit --
+4
+-- en/05-endpoint-unavailable-nojson/stdout --
+-- en/05-endpoint-unavailable-nojson/stderr --
+Error:
+  CLI and platform API versions are not compatible.
+  
+  Platform: https://example.invalid
+  Situation:
+    - The platform returned HTTP 404 for the API compatibility endpoint. This usually means the backend predates this CLI compatibility command.
+  
+  Versions:
+    CLI product version: dev
+    CLI API version: 1
+    CLI minimum backend API version: 1
+    Backend product version: unknown
+    Backend short commit SHA: unknown
+    Backend build type: unknown
+    Backend build time: unknown
+    Backend API version: unknown
+    Backend minimum CLI API version: unknown
+  
+  Guidance:
+    - You can continue using the CLI, but some operations may fail because the API contracts may differ.
+    - If an operation fails, first investigate its reported error and more common causes such as command input, local configuration, authentication, network connectivity, or platform state. The CLI itself, especially a development build, may also contain a bug.
+    - Only after those causes have been ruled out and API incompatibility still appears likely, try downgrading the CLI to a version compatible with the platform, or contact the platform administrator for support.
+-- en/06-endpoint-unavailable-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- en/06-endpoint-unavailable-json/exit --
+4
+-- en/06-endpoint-unavailable-json/stdout --
+-- en/06-endpoint-unavailable-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_API_VERSION_MISMATCH",
+  "message": "CLI and platform API versions are not compatible.\n\nPlatform: https://example.invalid\nSituation:\n  - The platform returned HTTP 404 for the API compatibility endpoint. This usually means the backend predates this CLI compatibility command.\n\nVersions:\n  CLI product version: dev\n  CLI API version: 1\n  CLI minimum backend API version: 1\n  Backend product version: unknown\n  Backend short commit SHA: unknown\n  Backend build type: unknown\n  Backend build time: unknown\n  Backend API version: unknown\n  Backend minimum CLI API version: unknown\n\nGuidance:\n  - You can continue using the CLI, but some operations may fail because the API contracts may differ.\n  - If an operation fails, first investigate its reported error and more common causes such as command input, local configuration, authentication, network connectivity, or platform state. The CLI itself, especially a development build, may also contain a bug.\n  - Only after those causes have been ruled out and API incompatibility still appears likely, try downgrading the CLI to a version compatible with the platform, or contact the platform administrator for support.",
+  "context": {
+    "backend_api_version": 0,
+    "backend_build_time": "",
+    "backend_build_type": "",
+    "backend_min_supported_cli_api_version": 0,
+    "backend_product_version": "",
+    "backend_short_commit_sha": "",
+    "cli_api_version": 1,
+    "cli_min_supported_backend_api_version": 1,
+    "cli_product_version": "dev",
+    "http_status": 404,
+    "msg": "404 page not found",
+    "platform_url": "https://example.invalid",
+    "reason": "compatibility_endpoint_not_found",
+    "status": "unknown"
+  }
+}
+-- en/07-backend-zero-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- en/07-backend-zero-nojson/exit --
+4
+-- en/07-backend-zero-nojson/stdout --
+-- en/07-backend-zero-nojson/stderr --
+Error:
+  CLI and platform API versions are not compatible.
+  
+  Platform: https://example.invalid
+  Situation:
+    - The backend API version (0) is lower than the CLI minimum supported backend API version (1).
+  
+  Versions:
+    CLI product version: dev
+    CLI API version: 1
+    CLI minimum backend API version: 1
+    Backend product version: v1.1.1
+    Backend short commit SHA: f42b0c2
+    Backend build type: release
+    Backend build time: 2026-07-26T08:30:00Z
+    Backend API version: 0
+    Backend minimum CLI API version: 0
+  
+  Guidance:
+    - You can continue using the CLI, but some operations may fail because the API contracts may differ.
+    - If an operation fails, first investigate its reported error and more common causes such as command input, local configuration, authentication, network connectivity, or platform state. The CLI itself, especially a development build, may also contain a bug.
+    - Only after those causes have been ruled out and API incompatibility still appears likely, try downgrading the CLI to a version compatible with the platform, or contact the platform administrator for support.
+-- en/08-backend-zero-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- en/08-backend-zero-json/exit --
+4
+-- en/08-backend-zero-json/stdout --
+-- en/08-backend-zero-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_API_VERSION_MISMATCH",
+  "message": "CLI and platform API versions are not compatible.\n\nPlatform: https://example.invalid\nSituation:\n  - The backend API version (0) is lower than the CLI minimum supported backend API version (1).\n\nVersions:\n  CLI product version: dev\n  CLI API version: 1\n  CLI minimum backend API version: 1\n  Backend product version: v1.1.1\n  Backend short commit SHA: f42b0c2\n  Backend build type: release\n  Backend build time: 2026-07-26T08:30:00Z\n  Backend API version: 0\n  Backend minimum CLI API version: 0\n\nGuidance:\n  - You can continue using the CLI, but some operations may fail because the API contracts may differ.\n  - If an operation fails, first investigate its reported error and more common causes such as command input, local configuration, authentication, network connectivity, or platform state. The CLI itself, especially a development build, may also contain a bug.\n  - Only after those causes have been ruled out and API incompatibility still appears likely, try downgrading the CLI to a version compatible with the platform, or contact the platform administrator for support.",
+  "context": {
+    "backend_api_version": 0,
+    "backend_build_time": "2026-07-26T08:30:00Z",
+    "backend_build_type": "release",
+    "backend_min_supported_cli_api_version": 0,
+    "backend_product_version": "v1.1.1",
+    "backend_short_commit_sha": "f42b0c2",
+    "cli_api_version": 1,
+    "cli_min_supported_backend_api_version": 1,
+    "cli_product_version": "dev",
+    "platform_url": "https://example.invalid",
+    "status": "backend_maybe_too_old"
+  }
+}
+-- en/09-no-active-platform-nojson/argv --
+crater compatibility --no-interactive
+-- en/09-no-active-platform-nojson/exit --
+2
+-- en/09-no-active-platform-nojson/stdout --
+-- en/09-no-active-platform-nojson/stderr --
+Error:
+  no target platform is available; specify one with --platform <URL> (login is not required)
+-- en/10-no-active-platform-json/argv --
+crater compatibility --no-interactive --json
+-- en/10-no-active-platform-json/exit --
+2
+-- en/10-no-active-platform-json/stdout --
+-- en/10-no-active-platform-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_MISSING_REQUIRED_FLAG",
+  "message": "no target platform is available; specify one with --platform \u003cURL\u003e (login is not required)"
+}
+-- en/11-network-timeout-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- en/11-network-timeout-nojson/exit --
+4
+-- en/11-network-timeout-nojson/stdout --
+-- en/11-network-timeout-nojson/stderr --
+Error:
+  could not reach server: Get "https://example.invalid/api/cli/compatibility": context deadline exceeded
+-- en/12-network-timeout-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- en/12-network-timeout-json/exit --
+4
+-- en/12-network-timeout-json/stdout --
+-- en/12-network-timeout-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_NETWORK_FAILURE",
+  "message": "could not reach server: Get \"https://example.invalid/api/cli/compatibility\": context deadline exceeded",
+  "context": {
+    "msg": "network error: Get \"https://example.invalid/api/cli/compatibility\": context deadline exceeded"
+  }
+}

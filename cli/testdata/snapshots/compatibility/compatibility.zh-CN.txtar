@@ -1,0 +1,246 @@
+# Crater CLI snapshot bundle (txtar). Regenerate: make snapshot-update (or UPDATE_SNAPSHOTS=1 go test ./test/snapshots/...)
+-- zh-CN/01-compatible-active-platform-nojson/argv --
+crater compatibility --no-interactive
+-- zh-CN/01-compatible-active-platform-nojson/exit --
+0
+-- zh-CN/01-compatible-active-platform-nojson/stdout --
+平台: https://example.invalid
+状态: 兼容
+CLI 产品版本: dev
+CLI API 版本: 1
+CLI 最低支持的后端 API 版本: 1
+后端产品版本: v1.1.1
+后端短提交 SHA: f42b0c2
+后端构建类型: release
+后端构建时间: 2026-07-26T08:30:00Z
+后端 API 版本: 1
+后端最低支持的 CLI API 版本: 1
+-- zh-CN/01-compatible-active-platform-nojson/stderr --
+-- zh-CN/02-compatible-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- zh-CN/02-compatible-json/exit --
+0
+-- zh-CN/02-compatible-json/stdout --
+{
+  "data": {
+    "compatibility": {
+      "platform_url": "https://example.invalid",
+      "status": "compatible",
+      "cli": {
+        "product_version": "dev",
+        "api_version": 1,
+        "min_supported_backend_api_version": 1
+      },
+      "backend": {
+        "product_version": "v1.1.1",
+        "short_commit_sha": "f42b0c2",
+        "build_type": "release",
+        "build_time": "2026-07-26T08:30:00Z",
+        "api_version": 1,
+        "min_supported_cli_api_version": 1
+      }
+    }
+  },
+  "status": "OK"
+}
+-- zh-CN/02-compatible-json/stderr --
+-- zh-CN/03-incompatible-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- zh-CN/03-incompatible-nojson/exit --
+4
+-- zh-CN/03-incompatible-nojson/stdout --
+-- zh-CN/03-incompatible-nojson/stderr --
+Error:
+  CLI 与平台的 API 版本不兼容。
+  
+  平台: https://example.invalid
+  具体情况：
+    - CLI API 版本（1）低于后端最低支持的 CLI API 版本（2）。
+  
+  版本信息：
+    CLI 产品版本: dev
+    CLI API 版本: 1
+    CLI 最低支持的后端 API 版本: 1
+    后端产品版本: v1.1.1
+    后端短提交 SHA: f42b0c2
+    后端构建类型: release
+    后端构建时间: 2026-07-26T08:30:00Z
+    后端 API 版本: 1
+    后端最低支持的 CLI API 版本: 2
+  
+  使用建议：
+    - 你仍可继续使用 CLI，但部分操作可能因 API 契约不一致而失败。
+    - 如果实际操作失败，请先根据该操作的报错排查更常见的原因，例如命令输入、本地配置、认证、网络连接或平台状态；CLI 自身也可能存在缺陷，尤其是开发版本。
+    - 只有在排除上述原因且仍有证据表明 API 契约不兼容时，才尝试将 CLI 升级到与平台兼容的版本，或联系平台管理员获得支持。
+-- zh-CN/04-incompatible-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- zh-CN/04-incompatible-json/exit --
+4
+-- zh-CN/04-incompatible-json/stdout --
+-- zh-CN/04-incompatible-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_API_VERSION_MISMATCH",
+  "message": "CLI 与平台的 API 版本不兼容。\n\n平台: https://example.invalid\n具体情况：\n  - CLI API 版本（1）低于后端最低支持的 CLI API 版本（2）。\n\n版本信息：\n  CLI 产品版本: dev\n  CLI API 版本: 1\n  CLI 最低支持的后端 API 版本: 1\n  后端产品版本: v1.1.1\n  后端短提交 SHA: f42b0c2\n  后端构建类型: release\n  后端构建时间: 2026-07-26T08:30:00Z\n  后端 API 版本: 1\n  后端最低支持的 CLI API 版本: 2\n\n使用建议：\n  - 你仍可继续使用 CLI，但部分操作可能因 API 契约不一致而失败。\n  - 如果实际操作失败，请先根据该操作的报错排查更常见的原因，例如命令输入、本地配置、认证、网络连接或平台状态；CLI 自身也可能存在缺陷，尤其是开发版本。\n  - 只有在排除上述原因且仍有证据表明 API 契约不兼容时，才尝试将 CLI 升级到与平台兼容的版本，或联系平台管理员获得支持。",
+  "context": {
+    "backend_api_version": 1,
+    "backend_build_time": "2026-07-26T08:30:00Z",
+    "backend_build_type": "release",
+    "backend_min_supported_cli_api_version": 2,
+    "backend_product_version": "v1.1.1",
+    "backend_short_commit_sha": "f42b0c2",
+    "cli_api_version": 1,
+    "cli_min_supported_backend_api_version": 1,
+    "cli_product_version": "dev",
+    "platform_url": "https://example.invalid",
+    "status": "cli_maybe_too_old"
+  }
+}
+-- zh-CN/05-endpoint-unavailable-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- zh-CN/05-endpoint-unavailable-nojson/exit --
+4
+-- zh-CN/05-endpoint-unavailable-nojson/stdout --
+-- zh-CN/05-endpoint-unavailable-nojson/stderr --
+Error:
+  CLI 与平台的 API 版本不兼容。
+  
+  平台: https://example.invalid
+  具体情况：
+    - 平台的 API 兼容性检查接口返回 HTTP 404。这通常表示后端版本早于当前 CLI 的兼容性检查命令。
+  
+  版本信息：
+    CLI 产品版本: dev
+    CLI API 版本: 1
+    CLI 最低支持的后端 API 版本: 1
+    后端产品版本: 未知
+    后端短提交 SHA: 未知
+    后端构建类型: 未知
+    后端构建时间: 未知
+    后端 API 版本: 未知
+    后端最低支持的 CLI API 版本: 未知
+  
+  使用建议：
+    - 你仍可继续使用 CLI，但部分操作可能因 API 契约不一致而失败。
+    - 如果实际操作失败，请先根据该操作的报错排查更常见的原因，例如命令输入、本地配置、认证、网络连接或平台状态；CLI 自身也可能存在缺陷，尤其是开发版本。
+    - 只有在排除上述原因且仍有证据表明 API 契约不兼容时，才尝试将 CLI 降级到与平台兼容的版本，或联系平台管理员获得支持。
+-- zh-CN/06-endpoint-unavailable-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- zh-CN/06-endpoint-unavailable-json/exit --
+4
+-- zh-CN/06-endpoint-unavailable-json/stdout --
+-- zh-CN/06-endpoint-unavailable-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_API_VERSION_MISMATCH",
+  "message": "CLI 与平台的 API 版本不兼容。\n\n平台: https://example.invalid\n具体情况：\n  - 平台的 API 兼容性检查接口返回 HTTP 404。这通常表示后端版本早于当前 CLI 的兼容性检查命令。\n\n版本信息：\n  CLI 产品版本: dev\n  CLI API 版本: 1\n  CLI 最低支持的后端 API 版本: 1\n  后端产品版本: 未知\n  后端短提交 SHA: 未知\n  后端构建类型: 未知\n  后端构建时间: 未知\n  后端 API 版本: 未知\n  后端最低支持的 CLI API 版本: 未知\n\n使用建议：\n  - 你仍可继续使用 CLI，但部分操作可能因 API 契约不一致而失败。\n  - 如果实际操作失败，请先根据该操作的报错排查更常见的原因，例如命令输入、本地配置、认证、网络连接或平台状态；CLI 自身也可能存在缺陷，尤其是开发版本。\n  - 只有在排除上述原因且仍有证据表明 API 契约不兼容时，才尝试将 CLI 降级到与平台兼容的版本，或联系平台管理员获得支持。",
+  "context": {
+    "backend_api_version": 0,
+    "backend_build_time": "",
+    "backend_build_type": "",
+    "backend_min_supported_cli_api_version": 0,
+    "backend_product_version": "",
+    "backend_short_commit_sha": "",
+    "cli_api_version": 1,
+    "cli_min_supported_backend_api_version": 1,
+    "cli_product_version": "dev",
+    "http_status": 404,
+    "msg": "404 page not found",
+    "platform_url": "https://example.invalid",
+    "reason": "compatibility_endpoint_not_found",
+    "status": "unknown"
+  }
+}
+-- zh-CN/07-backend-zero-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- zh-CN/07-backend-zero-nojson/exit --
+4
+-- zh-CN/07-backend-zero-nojson/stdout --
+-- zh-CN/07-backend-zero-nojson/stderr --
+Error:
+  CLI 与平台的 API 版本不兼容。
+  
+  平台: https://example.invalid
+  具体情况：
+    - 后端 API 版本（0）低于 CLI 最低支持的后端 API 版本（1）。
+  
+  版本信息：
+    CLI 产品版本: dev
+    CLI API 版本: 1
+    CLI 最低支持的后端 API 版本: 1
+    后端产品版本: v1.1.1
+    后端短提交 SHA: f42b0c2
+    后端构建类型: release
+    后端构建时间: 2026-07-26T08:30:00Z
+    后端 API 版本: 0
+    后端最低支持的 CLI API 版本: 0
+  
+  使用建议：
+    - 你仍可继续使用 CLI，但部分操作可能因 API 契约不一致而失败。
+    - 如果实际操作失败，请先根据该操作的报错排查更常见的原因，例如命令输入、本地配置、认证、网络连接或平台状态；CLI 自身也可能存在缺陷，尤其是开发版本。
+    - 只有在排除上述原因且仍有证据表明 API 契约不兼容时，才尝试将 CLI 降级到与平台兼容的版本，或联系平台管理员获得支持。
+-- zh-CN/08-backend-zero-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- zh-CN/08-backend-zero-json/exit --
+4
+-- zh-CN/08-backend-zero-json/stdout --
+-- zh-CN/08-backend-zero-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_API_VERSION_MISMATCH",
+  "message": "CLI 与平台的 API 版本不兼容。\n\n平台: https://example.invalid\n具体情况：\n  - 后端 API 版本（0）低于 CLI 最低支持的后端 API 版本（1）。\n\n版本信息：\n  CLI 产品版本: dev\n  CLI API 版本: 1\n  CLI 最低支持的后端 API 版本: 1\n  后端产品版本: v1.1.1\n  后端短提交 SHA: f42b0c2\n  后端构建类型: release\n  后端构建时间: 2026-07-26T08:30:00Z\n  后端 API 版本: 0\n  后端最低支持的 CLI API 版本: 0\n\n使用建议：\n  - 你仍可继续使用 CLI，但部分操作可能因 API 契约不一致而失败。\n  - 如果实际操作失败，请先根据该操作的报错排查更常见的原因，例如命令输入、本地配置、认证、网络连接或平台状态；CLI 自身也可能存在缺陷，尤其是开发版本。\n  - 只有在排除上述原因且仍有证据表明 API 契约不兼容时，才尝试将 CLI 降级到与平台兼容的版本，或联系平台管理员获得支持。",
+  "context": {
+    "backend_api_version": 0,
+    "backend_build_time": "2026-07-26T08:30:00Z",
+    "backend_build_type": "release",
+    "backend_min_supported_cli_api_version": 0,
+    "backend_product_version": "v1.1.1",
+    "backend_short_commit_sha": "f42b0c2",
+    "cli_api_version": 1,
+    "cli_min_supported_backend_api_version": 1,
+    "cli_product_version": "dev",
+    "platform_url": "https://example.invalid",
+    "status": "backend_maybe_too_old"
+  }
+}
+-- zh-CN/09-no-active-platform-nojson/argv --
+crater compatibility --no-interactive
+-- zh-CN/09-no-active-platform-nojson/exit --
+2
+-- zh-CN/09-no-active-platform-nojson/stdout --
+-- zh-CN/09-no-active-platform-nojson/stderr --
+Error:
+  没有可用的目标平台；请使用 --platform <URL> 指定平台（无需登录）
+-- zh-CN/10-no-active-platform-json/argv --
+crater compatibility --no-interactive --json
+-- zh-CN/10-no-active-platform-json/exit --
+2
+-- zh-CN/10-no-active-platform-json/stdout --
+-- zh-CN/10-no-active-platform-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_MISSING_REQUIRED_FLAG",
+  "message": "没有可用的目标平台；请使用 --platform \u003cURL\u003e 指定平台（无需登录）"
+}
+-- zh-CN/11-network-timeout-nojson/argv --
+crater compatibility --platform https://example.invalid --no-interactive
+-- zh-CN/11-network-timeout-nojson/exit --
+4
+-- zh-CN/11-network-timeout-nojson/stdout --
+-- zh-CN/11-network-timeout-nojson/stderr --
+Error:
+  无法连接服务器：Get "https://example.invalid/api/cli/compatibility": context deadline exceeded
+-- zh-CN/12-network-timeout-json/argv --
+crater compatibility --platform https://example.invalid --no-interactive --json
+-- zh-CN/12-network-timeout-json/exit --
+4
+-- zh-CN/12-network-timeout-json/stdout --
+-- zh-CN/12-network-timeout-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_NETWORK_FAILURE",
+  "message": "无法连接服务器：Get \"https://example.invalid/api/cli/compatibility\": context deadline exceeded",
+  "context": {
+    "msg": "network error: Get \"https://example.invalid/api/cli/compatibility\": context deadline exceeded"
+  }
+}

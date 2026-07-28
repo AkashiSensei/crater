@@ -3,6 +3,7 @@ package api
 // HTTP path 常量集中维护，业务方法禁止手写 "/api/..." 片段。
 
 const (
+	CompatibilityPrefix = "/api/cli"
 	AuthPrefix          = "/api/auth"
 	AccountsPrefix      = "/api/v1/accounts"
 	AdminAccountsPrefix = "/api/v1/admin/accounts"
@@ -34,6 +35,8 @@ const (
 	VCJobsPrefix        = "/api/v1/vcjobs"
 	AdminVCJobsPrefix   = "/api/v1/admin/vcjobs"
 )
+
+const CompatibilityPath = CompatibilityPrefix + "/compatibility"
 
 // AuthLoginPath 为登录接口路径（含模块前缀）。
 const AuthLoginPath = AuthPrefix + "/login"
