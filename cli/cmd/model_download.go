@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/raids-lab/crater/cli/internal/api"
 	"github.com/raids-lab/crater/cli/internal/completion"
-	"github.com/raids-lab/crater/cli/internal/i18n"
 	"github.com/spf13/cobra"
 )
-
-var modelDownloadCategories = []string{"model", "dataset"}
 
 var modelDownloadCmd = &cobra.Command{
 	Use:   "model-download",
@@ -30,17 +28,25 @@ var adminModelDownloadCmd = &cobra.Command{Use: "model-download", Short: "View a
 var adminModelDownloadLsCmd = &cobra.Command{Use: "ls", Short: "List model downloads", Args: noArgs, RunE: runAdminModelDownloadLs}
 
 func runModelDownloadLs(cmd *cobra.Command, _ []string) error {
-	path := api.ModelDownloadListPath
-	params := map[string]string{}
-	category := getStringParam(cmd, "category")
-	if category != "" {
-		params["category"] = category
-	}
-	return runRawRead(cmd, rawReadSpec{PayloadKey: "downloads", Path: path, Params: func(*cobra.Command) map[string]string { return params }, Table: printModelDownloadTable})
+	return runDownloadLs(cmd, nil)
 }
 
 func runAdminModelDownloadLs(cmd *cobra.Command, _ []string) error {
-	return runRawRead(cmd, rawReadSpec{PayloadKey: "downloads", Path: api.AdminModelDLPfx + "/models/downloads", Params: noParams, Table: printModelDownloadTable})
+	options, err := readDownloadListOptions(cmd)
+	if err != nil {
+		return err
+	}
+	client, err := activeModelDownloadClient()
+	if err != nil {
+		return err
+	}
+	downloads, err := client.ListAdminDownloads()
+	if err != nil {
+		return cliErrFromAPI(err)
+	}
+	downloads = filterAdminModelDownloads(downloads, options)
+	page := paginateList(downloads, options.ListOptions)
+	return writeListPage("downloads", page, options.AllPages, printDownloadTable)
 }
 
 func runModelDownloadGet(cmd *cobra.Command, args []string) error {
@@ -59,16 +65,34 @@ func runModelDownloadLogs(cmd *cobra.Command, args []string) error {
 	return runRawStringRead(cmd, fmt.Sprintf("%s/%s/logs", api.ModelDownloadListPath, api.UintPath(id)), nil, "logs")
 }
 
-func printModelDownloadTable(data interface{}) {
-	fmt.Printf("%s %s %s %s %s %s\n", i18n.PadRight(i18n.T("table_id"), 8), i18n.PadRight(i18n.T("table_name"), 32), i18n.PadRight(i18n.T("table_type"), 10), i18n.PadRight(i18n.T("table_status"), 14), i18n.PadRight("PATH", 36), i18n.PadRight("UPDATED", 22))
-	for _, row := range rawList(data) {
-		fmt.Printf("%s %s %s %s %s %s\n", i18n.PadRight(rawString(row, "id"), 8), i18n.PadRight(rawString(row, "name"), 32), i18n.PadRight(rawString(row, "category"), 10), i18n.PadRight(rawString(row, "status"), 14), i18n.PadRight(rawString(row, "path"), 36), i18n.PadRight(rawString(row, "updatedAt"), 22))
+func filterAdminModelDownloads(
+	downloads []api.ModelDownloadResp,
+	options api.ModelDownloadListOptions,
+) []api.ModelDownloadResp {
+	search := strings.ToLower(options.Search)
+	filtered := downloads[:0]
+	for _, download := range downloads {
+		if options.Category != "" && download.Category != options.Category {
+			continue
+		}
+		if options.Status != "" && download.Status != options.Status {
+			continue
+		}
+		if search != "" && !strings.Contains(strings.ToLower(download.Name), search) {
+			continue
+		}
+		filtered = append(filtered, download)
 	}
+	return filtered
 }
 
 func init() {
-	modelDownloadLsCmd.Flags().String("category", "", "Filter by model download category")
-	completion.RegisterFlagValue([]string{"model-download", "ls"}, "category", staticValueCompleter(modelDownloadCategories, nil))
+	addDownloadListFlags(modelDownloadLsCmd)
+	addDownloadListFlags(adminModelDownloadLsCmd)
+	completion.RegisterFlagValue([]string{"model-download", "ls"}, "category", staticValueCompleter(downloadCategories, nil))
+	completion.RegisterFlagValue([]string{"model-download", "ls"}, "status", staticValueCompleter(downloadStatuses, nil))
+	completion.RegisterFlagValue([]string{"admin", "model-download", "ls"}, "category", staticValueCompleter(downloadCategories, nil))
+	completion.RegisterFlagValue([]string{"admin", "model-download", "ls"}, "status", staticValueCompleter(downloadStatuses, nil))
 	modelDownloadCmd.AddCommand(modelDownloadLsCmd, modelDownloadGetCmd, modelDownloadLogsCmd)
 	rootCmd.AddCommand(modelDownloadCmd)
 	adminModelDownloadCmd.AddCommand(adminModelDownloadLsCmd)

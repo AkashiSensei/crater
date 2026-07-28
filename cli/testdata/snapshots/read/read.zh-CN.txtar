@@ -82,7 +82,7 @@ crater node gpu --json --no-interactive
   "message": "缺少必要参数：节点名称 (\u003cname\u003e)"
 }
 -- zh-CN/08-node-pods-404-json/argv --
-crater node pods missing-node --json --no-interactive
+crater node pods missing-node --namespace team-workloads --json --no-interactive
 -- zh-CN/08-node-pods-404-json/exit --
 4
 -- zh-CN/08-node-pods-404-json/stdout --
@@ -161,7 +161,7 @@ crater job ls --days -2 --json --no-interactive
 {
   "category": "usage_error",
   "code": "ERR_INVALID_FLAG_VALUE",
-  "message": "days 必须大于等于 -1"
+  "message": "回溯天数必须大于等于 -1"
 }
 -- zh-CN/15-job-ls-conflict-json/argv --
 crater job ls --interactive --batch --json --no-interactive
@@ -429,7 +429,7 @@ crater admin user ls --json --no-interactive
   }
 }
 -- zh-CN/35-pod-logs-missing-json/argv --
-crater pod logs ns pod --json --no-interactive
+crater pod logs pod --json --no-interactive
 -- zh-CN/35-pod-logs-missing-json/exit --
 2
 -- zh-CN/35-pod-logs-missing-json/stdout --
@@ -523,5 +523,146 @@ crater admin system-config llm --json --no-interactive
     "crater_code": 404,
     "http_status": 404,
     "msg": "simulated"
+  }
+}
+-- zh-CN/42-pod-logs-missing-namespace-json/argv --
+crater pod logs worker-0 main --json --no-interactive
+-- zh-CN/42-pod-logs-missing-namespace-json/exit --
+2
+-- zh-CN/42-pod-logs-missing-namespace-json/stdout --
+-- zh-CN/42-pod-logs-missing-namespace-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_MISSING_REQUIRED_FLAG",
+  "message": "缺少必要参数：命名空间 (--namespace)"
+}
+-- zh-CN/43-node-pods-multiple-list-issues-json/argv --
+crater node pods gpu-01 --namespace kube-system --all-namespaces --page 0 --status bad --json --no-interactive
+-- zh-CN/43-node-pods-multiple-list-issues-json/exit --
+2
+-- zh-CN/43-node-pods-multiple-list-issues-json/stdout --
+-- zh-CN/43-node-pods-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1\n不能同时使用 --namespace 和 --all-namespaces\n无效的 Pod 状态：bad",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "页码必须至少为 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "all-namespaces",
+        "message": "不能同时使用 --namespace 和 --all-namespaces"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "无效的 Pod 状态：bad"
+      }
+    ]
+  }
+}
+-- zh-CN/44-admin-user-multiple-list-issues-json/argv --
+crater admin user ls --page 0 --page-size 201 --role Owner --status Disabled --json --no-interactive
+-- zh-CN/44-admin-user-multiple-list-issues-json/exit --
+2
+-- zh-CN/44-admin-user-multiple-list-issues-json/stdout --
+-- zh-CN/44-admin-user-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1\n每页数量必须在 1 到 200 之间\n无效的用户角色：Owner\n无效的用户状态：Disabled",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "页码必须至少为 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "每页数量必须在 1 到 200 之间"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "role",
+        "message": "无效的用户角色：Owner"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "无效的用户状态：Disabled"
+      }
+    ]
+  }
+}
+-- zh-CN/45-billing-multiple-list-issues-json/argv --
+crater billing jobs --page 0 --page-size 201 --days -2 --json --no-interactive
+-- zh-CN/45-billing-multiple-list-issues-json/exit --
+2
+-- zh-CN/45-billing-multiple-list-issues-json/stdout --
+-- zh-CN/45-billing-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1\n每页数量必须在 1 到 200 之间\n回溯天数必须大于等于 -1",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "页码必须至少为 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "每页数量必须在 1 到 200 之间"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "days",
+        "message": "回溯天数必须大于等于 -1"
+      }
+    ]
+  }
+}
+-- zh-CN/46-admin-model-download-multiple-list-issues-json/argv --
+crater admin model-download ls --page 0 --page-size 101 --category bad --status Unknown --json --no-interactive
+-- zh-CN/46-admin-model-download-multiple-list-issues-json/exit --
+2
+-- zh-CN/46-admin-model-download-multiple-list-issues-json/stdout --
+-- zh-CN/46-admin-model-download-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1\n每页数量必须在 1 到 100 之间\n无效的下载类别：bad\n无效的下载状态：Unknown",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "页码必须至少为 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "每页数量必须在 1 到 100 之间"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "category",
+        "message": "无效的下载类别：bad"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "无效的下载状态：Unknown"
+      }
+    ]
   }
 }

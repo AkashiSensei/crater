@@ -26,6 +26,15 @@
 
 所有用户可见命令都必须显式定义 Cobra 参数校验。无位置参数的命令必须拒绝多余位置参数，不能静默忽略；有位置参数的命令必须按 [COMMANDS.md](./COMMANDS.md) 校验数量和含义。解析阶段失败仍需遵守全局 `--json` 与错误输出规则。
 
+### 列表分页
+
+高基数列表按 [COMMANDS.md](./COMMANDS.md) 的指令级约定采用公共 `--page`、`--page-size`、`--all-pages` 契约；不得因此机械截断未采用这些 flags 的低基数列表。
+
+- `--page` 默认 `1` 且必须大于等于 `1`；`--page-size` 默认 `15`。公共最大值为 `200`，若后端端点有更小上限（当前 `download ls` 及兼容的 `model-download ls`/管理员列表为 `100`），命令必须使用该上限并写入 COMMANDS。
+- `--all-pages` 从第一页开始返回完整筛选结果，省略 JSON `data.pagination`。服务端分页命令在用户未显式提供 `--page-size` 时采用端点允许的最大批量，显式合法值优先；默认分页 JSON 在 `data` 中同时返回资源数组和 `pagination: {page, page_size, total}`，人类可读表格应显示公共页摘要。
+- 后端支持分页与筛选时优先透传，由 `internal/api` 暴露 typed page DTO；后端只返回完整数组时，在 `cmd` 层先完成筛选和稳定排序，再本地分页。若一个命令同时有服务端分页与本地筛选，必须先顺序读取全部候选服务端页，再本地筛选和重新分页，确保 `total` 与页面边界针对最终筛选结果。
+- 分页字段错误必须与状态、类型、namespace 等同一次调用中的其它本地用法错误一起收集，经 `errUsageFromIssues` 一次返回；不得先因分页参数 fail-fast 而丢失其它可同时发现的问题。
+
 ### 文档驱动
 
 一方面，整个开发过程中必须严格遵守本规范文档；另一方面，使用[指令文档](./COMMANDS.md)驱动新指令的开发和已有指令的修改。
@@ -72,7 +81,7 @@
 - `internal/api` 的导出方法只返回业务数据与 `error`；使用本包错误类型表达「已收到 HTTP 响应但未成功」「网络层失败」等语义。**禁止**在 `internal/api` 内构造 `*clierror.Error`、向 stdout/stderr 输出、或调用 `i18n`。
 - 通过 `cmd/errors.go` 的 `cliErrFromAPI` 等 helper 将 `internal/api` 返回的错误映射为 `*clierror.Error`，并在 `RunE` 中 `return`；命令实现不得自行分散处理 API 错误码映射。HTTP 档位与 `Code` 的对应关系遵循本文档「命令结果」中的 `api_error` 约定。
 - 新增或修改后端支持的命令时，必须确认目标后端版本真实支持对应 API 和语义。不要新增后端不会消费的 flag、query 或 body 字段；展示给用户的信息必须来自有效后端响应或已写入文档的本地状态来源，不能基于未使用字段或本地猜测。
-- 仅在本地开发或自测需要**伪造传输层结果**时，使用环境变量 `CRATER_TEST_SANDBOX_HTTP`（如 `timeout` / `error404` 等）；**允许取值与行为以架构文档「网络通信」节为准**。契约验证与前后端联调须使用真实服务或后端提供的 mock，不得把模拟响应当作平台契约。
+- 仅在本地开发或自测需要**伪造传输层结果**，或让成功快照访问由当前测试进程管理的 loopback fixture 时，使用环境变量 `CRATER_TEST_SANDBOX_HTTP`（如 `timeout` / `error404` / `passthrough`）；**允许取值与行为以架构文档「网络通信」节为准**。契约验证与前后端联调须使用真实服务或后端提供的 mock，不得把测试 fixture 的响应当作平台契约。
 
 ---
 
@@ -146,13 +155,19 @@
 
 快照与可复现测试通过“网络 + 存储”两类沙箱开关实现隔离（语义是**强约束**）：
 
-- **网络（阻止真实请求）**：`CRATER_TEST_SANDBOX_HTTP`（如 `timeout` / `error404`）
+- **网络（阻止外部真实请求）**：`CRATER_TEST_SANDBOX_HTTP`（如 `timeout` / `error404`）；成功快照可以使用 `passthrough` 访问由当前测试进程创建和管理的 loopback fixture
 - **存储（阻止真实存储访问）**：`CRATER_TEST_SANDBOX=1`（快照测试默认开启）
 
 两者的**共同目的**：
 
-- 避免测试过程中修改或影响外部环境（开发者真实配置/凭据、真实网络）。
+- 避免测试过程中修改或影响外部环境（开发者真实配置/凭据、外部网络与真实平台）。
 - 避免测试受外部环境影响（登录态、网络波动、残留文件），保持稳定可复现。
+
+`passthrough` 是受限例外，不代表允许任意本地或真实网络访问。使用时必须同时满足：
+
+- 目标仅为当前测试进程创建的 `httptest.Server` 等 loopback fixture；禁止连接外部网络、真实 Crater 平台或测试启动前已存在的有状态本地服务。
+- fixture 响应必须由测试代码固定，不得依赖开发者机器或其它外部状态；fixture 的启动、URL 注入和关闭必须全部由当前测试管理。
+- 测试通过 `CRATER_TEST_SANDBOX_PLATFORM_URL` 将 fixture URL 注入沙箱 session；该 URL 和实际请求均必须通过 loopback host 校验。运行环境必须允许测试进程执行 loopback bind，并允许 CLI 子进程连接该地址。
 
 **边界**：沙箱不是完整的进程隔离；语言与 locale（如 `CRATER_LANG`、`LANG/LC_ALL`）仍可能影响行为与输出，快照 harness 必须显式固定。
 
@@ -176,7 +191,7 @@
 
 本规范强调**测试分层与职责**，具体命令入口以 `cli/Makefile` 为准（例如 `unit-test` / `snapshot-check` / `snapshot-update` / `test`）。
 
-其中快照测试的实现入口与用例定义由 `cli/test/snapshots/**` 下的测试代码驱动。**golden 快照测试默认开启存储沙箱（`CRATER_TEST_SANDBOX=1`）**；除非在文档中明确说明并给出替代隔离方案，否则不得在快照 harness 中关闭该默认设置。
+其中快照测试的实现入口与用例定义由 `cli/test/snapshots/**` 下的测试代码驱动。`snapshot-check`、`snapshot-update`、`test` 与 `pre-commit-check` 都会自动执行相应快照用例及其测试管理的 loopback fixture；运行这些目标的环境因此必须支持 loopback bind/connect。**golden 快照测试默认开启存储沙箱（`CRATER_TEST_SANDBOX=1`）**；除非在文档中明确说明并给出替代隔离方案，否则不得在快照 harness 中关闭该默认设置。
 
 **禁止手改 golden**：`cli/testdata/snapshots/**/*.txtar` 须通过 `make snapshot-update`（或 `UPDATE_SNAPSHOTS=1 go test ./test/snapshots/...`）由测试运行生成；不得直接编辑 golden 文本冒充快照结果。
 
@@ -253,6 +268,7 @@ Crater 后端 API 错误信封为 `code`、`data`、`msg`。CLI 不应依赖后�
 实现上：
 
 - 使用 `output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(payload))`。顶层 `status` 使用常量 `output.JSONSuccessStatus`；业务载荷只进 `data` 对象。成功体不使用错误体的 `category` / `code`；`data` 不得含 `http_status`。
+- 采用公共分页契约的列表，其 `data` 同时包含资源数组和 `pagination: {page, page_size, total}`；`--all-pages` 返回完整过滤结果并省略 `pagination`。具体资源键、上限及筛选语义以 COMMANDS 为准。
 - `data` 允许哪些键、是否可为 `{}`、顶层是否带 `message`、敏感字段能否出现等，**只以 COMMANDS 为准**，本规范不列举。
 
 ### 成功：非 `--json`

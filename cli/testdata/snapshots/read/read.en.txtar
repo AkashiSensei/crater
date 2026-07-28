@@ -82,7 +82,7 @@ crater node gpu --json --no-interactive
   "message": "node name is required (\u003cname\u003e)"
 }
 -- en/08-node-pods-404-json/argv --
-crater node pods missing-node --json --no-interactive
+crater node pods missing-node --namespace team-workloads --json --no-interactive
 -- en/08-node-pods-404-json/exit --
 4
 -- en/08-node-pods-404-json/stdout --
@@ -429,7 +429,7 @@ crater admin user ls --json --no-interactive
   }
 }
 -- en/35-pod-logs-missing-json/argv --
-crater pod logs ns pod --json --no-interactive
+crater pod logs pod --json --no-interactive
 -- en/35-pod-logs-missing-json/exit --
 2
 -- en/35-pod-logs-missing-json/stdout --
@@ -523,5 +523,146 @@ crater admin system-config llm --json --no-interactive
     "crater_code": 404,
     "http_status": 404,
     "msg": "simulated"
+  }
+}
+-- en/42-pod-logs-missing-namespace-json/argv --
+crater pod logs worker-0 main --json --no-interactive
+-- en/42-pod-logs-missing-namespace-json/exit --
+2
+-- en/42-pod-logs-missing-namespace-json/stdout --
+-- en/42-pod-logs-missing-namespace-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_MISSING_REQUIRED_FLAG",
+  "message": "namespace is required (--namespace)"
+}
+-- en/43-node-pods-multiple-list-issues-json/argv --
+crater node pods gpu-01 --namespace kube-system --all-namespaces --page 0 --status bad --json --no-interactive
+-- en/43-node-pods-multiple-list-issues-json/exit --
+2
+-- en/43-node-pods-multiple-list-issues-json/stdout --
+-- en/43-node-pods-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1\n--namespace and --all-namespaces cannot be used together\ninvalid pod status: bad",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "page must be at least 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "all-namespaces",
+        "message": "--namespace and --all-namespaces cannot be used together"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "invalid pod status: bad"
+      }
+    ]
+  }
+}
+-- en/44-admin-user-multiple-list-issues-json/argv --
+crater admin user ls --page 0 --page-size 201 --role Owner --status Disabled --json --no-interactive
+-- en/44-admin-user-multiple-list-issues-json/exit --
+2
+-- en/44-admin-user-multiple-list-issues-json/stdout --
+-- en/44-admin-user-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1\npage-size must be between 1 and 200\ninvalid user role: Owner\ninvalid user status: Disabled",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "page must be at least 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "page-size must be between 1 and 200"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "role",
+        "message": "invalid user role: Owner"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "invalid user status: Disabled"
+      }
+    ]
+  }
+}
+-- en/45-billing-multiple-list-issues-json/argv --
+crater billing jobs --page 0 --page-size 201 --days -2 --json --no-interactive
+-- en/45-billing-multiple-list-issues-json/exit --
+2
+-- en/45-billing-multiple-list-issues-json/stdout --
+-- en/45-billing-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1\npage-size must be between 1 and 200\ndays must be -1 or greater",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "page must be at least 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "page-size must be between 1 and 200"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "days",
+        "message": "days must be -1 or greater"
+      }
+    ]
+  }
+}
+-- en/46-admin-model-download-multiple-list-issues-json/argv --
+crater admin model-download ls --page 0 --page-size 101 --category bad --status Unknown --json --no-interactive
+-- en/46-admin-model-download-multiple-list-issues-json/exit --
+2
+-- en/46-admin-model-download-multiple-list-issues-json/stdout --
+-- en/46-admin-model-download-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1\npage-size must be between 1 and 100\ninvalid download category: bad\ninvalid download status: Unknown",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "page must be at least 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "page-size must be between 1 and 100"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "category",
+        "message": "invalid download category: bad"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "invalid download status: Unknown"
+      }
+    ]
   }
 }

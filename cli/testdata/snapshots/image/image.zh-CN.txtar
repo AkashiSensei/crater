@@ -403,3 +403,49 @@ Global Flags:
       --json             以原始 JSON 格式输出
       --no-interactive   禁用交互式提示
 -- zh-CN/27-image-build-pip-apt-help/stderr --
+-- zh-CN/28-image-ls-multiple-list-issues-json/argv --
+crater image ls --page 0 --page-size 201 --type bad --visibility bad --json --no-interactive
+-- zh-CN/28-image-ls-multiple-list-issues-json/exit --
+2
+-- zh-CN/28-image-ls-multiple-list-issues-json/stdout --
+-- zh-CN/28-image-ls-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1\n每页数量必须在 1 到 200 之间\n无效的镜像类型：bad\n无效的镜像可见性：bad",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "页码必须至少为 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "每页数量必须在 1 到 200 之间"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "type",
+        "message": "无效的镜像类型：bad"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "visibility",
+        "message": "无效的镜像可见性：bad"
+      }
+    ]
+  }
+}
+-- zh-CN/29-image-build-ls-invalid-page-json/argv --
+crater image build ls --page 0 --json --no-interactive
+-- zh-CN/29-image-build-ls-invalid-page-json/exit --
+2
+-- zh-CN/29-image-build-ls-invalid-page-json/stdout --
+-- zh-CN/29-image-build-ls-invalid-page-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1"
+}

@@ -32,12 +32,22 @@ const (
 	downloadStatusReady       = "Ready"
 	downloadStatusFailed      = "Failed"
 	downloadStatusPaused      = "Paused"
+	downloadStatusPending     = "Pending"
+	downloadStatusDownloading = "Downloading"
+	maxDownloadPageSize       = 100
 )
 
 var (
 	downloadCategories = []string{downloadCategoryModel, downloadCategoryDataset}
 	downloadSources    = []string{downloadSourceModelScope, downloadSourceHuggingFace, downloadSourceAliasMS, downloadSourceAliasHF}
-	modelNamePattern   = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
+	downloadStatuses   = []string{
+		downloadStatusPending,
+		downloadStatusDownloading,
+		downloadStatusPaused,
+		downloadStatusReady,
+		downloadStatusFailed,
+	}
+	modelNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 )
 
 type downloadCreateInput struct {
@@ -448,30 +458,111 @@ func submitDownload(cmd *cobra.Command, in downloadCreateInput) error {
 }
 
 func runDownloadLs(cmd *cobra.Command, _ []string) error {
-	category, _ := cmd.Flags().GetString("category")
-	category = strings.TrimSpace(category)
-	if category != "" && !downloadCategoryValid(category) {
-		return errUsageFromIssues([]usageIssue{{
-			Code:    errorcodes.ErrInvalidFlagValue,
-			Message: i18n.T("err_invalid_download_category", category),
-			Field:   "category",
-		}})
+	options, err := readDownloadListOptions(cmd)
+	if err != nil {
+		return err
 	}
 	client, err := activeModelDownloadClient()
 	if err != nil {
 		return err
 	}
-	downloads, err := client.ListDownloads(category)
+	page, err := fetchDownloadList(client, options)
 	if err != nil {
 		return cliErrFromAPI(err)
 	}
 	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{
-			"downloads": downloads,
-		}))
+		return output.WriteSuccessJSON(
+			os.Stdout,
+			output.SuccessEnvelope(downloadListPayload(page, options.AllPages)),
+		)
 	}
-	printDownloadTable(downloads)
+	printDownloadTable(page.Items)
+	printListPageSummary(page.Page, options.AllPages)
 	return nil
+}
+
+func downloadListPayload(page api.ModelDownloadPage, allPages bool) map[string]interface{} {
+	payload := listPagePayload("downloads", page.Page, allPages)
+	payload["summary"] = page.Summary
+	return payload
+}
+
+func readDownloadListOptions(cmd *cobra.Command) (api.ModelDownloadListOptions, error) {
+	listOptions, issues := listPaginationOptions(cmd, maxDownloadPageSize)
+	category, _ := cmd.Flags().GetString("category")
+	status, _ := cmd.Flags().GetString("status")
+	search, _ := cmd.Flags().GetString("search")
+	category = strings.TrimSpace(category)
+	status = strings.TrimSpace(status)
+	search = strings.TrimSpace(search)
+
+	if category != "" && !downloadCategoryValid(category) {
+		issues = append(issues, usageIssue{
+			Code:    errorcodes.ErrInvalidFlagValue,
+			Message: i18n.T("err_invalid_download_category", category),
+			Field:   "category",
+		})
+	}
+	if status != "" && !slices.Contains(downloadStatuses, status) {
+		issues = append(issues, invalidIssue(
+			"status",
+			i18n.T("err_invalid_download_status", status),
+		))
+	}
+	if len(issues) > 0 {
+		return api.ModelDownloadListOptions{}, errUsageFromIssues(issues)
+	}
+	return api.ModelDownloadListOptions{
+		ListOptions: listOptions,
+		Category:    category,
+		Status:      status,
+		Search:      search,
+	}, nil
+}
+
+type modelDownloadLister interface {
+	ListDownloadPage(api.ModelDownloadListOptions) (api.ModelDownloadPage, error)
+}
+
+func fetchDownloadList(
+	client modelDownloadLister,
+	options api.ModelDownloadListOptions,
+) (api.ModelDownloadPage, error) {
+	if !options.AllPages {
+		return client.ListDownloadPage(options)
+	}
+
+	var summary map[string]int64
+	items, err := api.FetchAllPages(
+		options.ListOptions,
+		func(listOptions api.ListOptions) (api.Page[api.ModelDownloadResp], error) {
+			nextOptions := options
+			nextOptions.ListOptions = listOptions
+			page, err := client.ListDownloadPage(nextOptions)
+			if err != nil {
+				return api.Page[api.ModelDownloadResp]{}, err
+			}
+			if summary == nil {
+				summary = page.Summary
+			}
+			return page.Page, nil
+		},
+	)
+	if err != nil {
+		return api.ModelDownloadPage{}, err
+	}
+	if summary == nil {
+		summary = map[string]int64{}
+	}
+	return api.ModelDownloadPage{
+		Page: api.Page[api.ModelDownloadResp]{
+			Items:    items,
+			Total:    int64(len(items)),
+			Page:     1,
+			PageSize: options.Normalize().PageSize,
+		},
+		Summary: summary,
+	}, nil
 }
 
 func runDownloadGet(cmd *cobra.Command, args []string) error {
@@ -775,7 +866,7 @@ func init() {
 	addDownloadCreateFlags(downloadCreateCmd, true)
 	addDownloadCreateFlags(downloadModelCmd, false)
 	addDownloadCreateFlags(downloadDatasetCmd, false)
-	downloadLsCmd.Flags().String("category", "", "Filter by category (model | dataset)")
+	addDownloadListFlags(downloadLsCmd)
 	downloadLogsCmd.Flags().Bool("follow", false, "Follow logs until the download reaches a terminal status")
 	downloadLogsCmd.Flags().Duration("poll-interval", 5*time.Second, "Polling interval for --follow")
 	downloadRmCmd.Flags().BoolP("yes", "y", false, "Remove without confirmation")
@@ -795,6 +886,7 @@ func init() {
 	completion.RegisterFlagValue([]string{"download", "ls"}, "category", staticValueCompleter(downloadCategories, func(v string) string {
 		return "download_category_" + v + "_desc"
 	}))
+	completion.RegisterFlagValue([]string{"download", "ls"}, "status", staticValueCompleter(downloadStatuses, nil))
 
 	downloadCmd.AddCommand(downloadCreateCmd)
 	downloadCmd.AddCommand(downloadModelCmd)
@@ -807,6 +899,13 @@ func init() {
 	downloadCmd.AddCommand(downloadRetryCmd)
 	downloadCmd.AddCommand(downloadRmCmd)
 	rootCmd.AddCommand(downloadCmd)
+}
+
+func addDownloadListFlags(cmd *cobra.Command) {
+	addListPaginationFlags(cmd)
+	cmd.Flags().String("category", "", i18n.T("flag_category"))
+	cmd.Flags().String("status", "", i18n.T("flag_status"))
+	cmd.Flags().String("search", "", i18n.T("flag_search"))
 }
 
 func addDownloadCreateFlags(cmd *cobra.Command, includeCategory bool) {

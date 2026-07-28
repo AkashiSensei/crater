@@ -197,7 +197,7 @@ func TestJobClientDeleteAcceptsNullSuccessData(t *testing.T) {
 }
 
 func TestListJobsSendsPagingAndServerFilters(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	client := jobTestClient(t, func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != VCJobListPath+"/all" {
 			t.Fatalf("unexpected path: %s", request.URL.Path)
 		}
@@ -205,7 +205,8 @@ func TestListJobsSendsPagingAndServerFilters(t *testing.T) {
 		if query.Get("page") != "2" || query.Get("page_size") != "25" || query.Get("sort") != "-createdAt" {
 			t.Fatalf("unexpected paging query: %v", query)
 		}
-		if query.Get("days") != "14" || query.Get("status") != "Running" || query.Get("node") != "gpu-01" {
+		if query.Get("days") != "14" || query.Get("status") != "Running" ||
+			query.Get("node") != "gpu-01" || query.Get("search") != "trainer" {
 			t.Fatalf("unexpected filters: %v", query)
 		}
 		if !reflect.DeepEqual(query["job_type"], []string{"jupyter", "webide"}) {
@@ -215,15 +216,15 @@ func TestListJobsSendsPagingAndServerFilters(t *testing.T) {
 		_ = json.NewEncoder(writer).Encode(Response[Page[JobInfo]]{
 			Data: Page[JobInfo]{Items: []JobInfo{{Name: "job"}}, Total: 1, Page: 2, PageSize: 25},
 		})
-	}))
-	defer server.Close()
+	})
 
-	page, err := NewClient(server.URL).ListJobs(JobListOptions{
+	page, err := client.ListJobs(JobListOptions{
 		ListOptions: ListOptions{Page: 2, PageSize: 25, Sort: "-createdAt"},
 		All:         true,
 		Days:        14,
 		Status:      "Running",
 		Node:        "gpu-01",
+		Search:      "trainer",
 		Interactive: true,
 	})
 	if err != nil {
@@ -236,7 +237,7 @@ func TestListJobsSendsPagingAndServerFilters(t *testing.T) {
 
 func TestFetchAllJobPagesSequentially(t *testing.T) {
 	requested := make([]string, 0, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	client := jobTestClient(t, func(writer http.ResponseWriter, request *http.Request) {
 		page := request.URL.Query().Get("page")
 		requested = append(requested, page)
 		items := map[string][]JobInfo{
@@ -247,10 +248,8 @@ func TestFetchAllJobPagesSequentially(t *testing.T) {
 		_ = json.NewEncoder(writer).Encode(Response[Page[JobInfo]]{
 			Data: Page[JobInfo]{Items: items, Total: 3, PageSize: 2},
 		})
-	}))
-	defer server.Close()
+	})
 
-	client := NewClient(server.URL)
 	items, err := FetchAllPages(ListOptions{PageSize: 2}, func(options ListOptions) (Page[JobInfo], error) {
 		return client.ListJobs(JobListOptions{ListOptions: options})
 	})

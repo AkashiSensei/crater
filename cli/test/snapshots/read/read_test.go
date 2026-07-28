@@ -31,7 +31,7 @@ func runReadSnapshots(t *testing.T, lang string) {
 		{ID: "05-node-ls-extra-arg-json", Args: []string{"node", "ls", "unexpected", "--json", "--no-interactive"}},
 		{ID: "06-node-pods-missing-json", Args: []string{"node", "pods", "--json", "--no-interactive"}},
 		{ID: "07-node-gpu-missing-json", Args: []string{"node", "gpu", "--json", "--no-interactive"}},
-		{ID: "08-node-pods-404-json", Args: []string{"node", "pods", "missing-node", "--json", "--no-interactive"}},
+		{ID: "08-node-pods-404-json", Args: []string{"node", "pods", "missing-node", "--namespace", "team-workloads", "--json", "--no-interactive"}},
 		{ID: "09-job-get-missing-json", Args: []string{"job", "get", "--json", "--no-interactive"}},
 		{ID: "10-job-pods-missing-json", Args: []string{"job", "pods", "--json", "--no-interactive"}},
 		{ID: "11-job-events-missing-json", Args: []string{"job", "events", "--json", "--no-interactive"}},
@@ -58,13 +58,18 @@ func runReadSnapshots(t *testing.T, lang string) {
 		{ID: "32-admin-order-ls-404-json", Args: []string{"admin", "order", "ls", "--json", "--no-interactive"}},
 		{ID: "33-user-get-missing-json", Args: []string{"user", "get", "--json", "--no-interactive"}},
 		{ID: "34-admin-user-ls-404-json", Args: []string{"admin", "user", "ls", "--json", "--no-interactive"}},
-		{ID: "35-pod-logs-missing-json", Args: []string{"pod", "logs", "ns", "pod", "--json", "--no-interactive"}},
+		{ID: "35-pod-logs-missing-json", Args: []string{"pod", "logs", "pod", "--json", "--no-interactive"}},
 		{ID: "36-billing-jobs-404-json", Args: []string{"billing", "jobs", "--all", "--json", "--no-interactive"}},
 		{ID: "37-admin-billing-jobs-404-json", Args: []string{"admin", "billing", "jobs", "--json", "--no-interactive"}},
 		{ID: "38-aijob-removed-json", Args: []string{"aijob", "ls", "--json", "--no-interactive"}},
 		{ID: "39-spjob-removed-json", Args: []string{"spjob", "yaml", "--json", "--no-interactive"}},
 		{ID: "40-admin-operation-logs-404-json", Args: []string{"admin", "operation-logs", "--json", "--no-interactive"}},
 		{ID: "41-admin-system-config-llm-404-json", Args: []string{"admin", "system-config", "llm", "--json", "--no-interactive"}},
+		{ID: "42-pod-logs-missing-namespace-json", Args: []string{"pod", "logs", "worker-0", "main", "--json", "--no-interactive"}},
+		{ID: "43-node-pods-multiple-list-issues-json", Args: []string{"node", "pods", "gpu-01", "--namespace", "kube-system", "--all-namespaces", "--page", "0", "--status", "bad", "--json", "--no-interactive"}},
+		{ID: "44-admin-user-multiple-list-issues-json", Args: []string{"admin", "user", "ls", "--page", "0", "--page-size", "201", "--role", "Owner", "--status", "Disabled", "--json", "--no-interactive"}},
+		{ID: "45-billing-multiple-list-issues-json", Args: []string{"billing", "jobs", "--page", "0", "--page-size", "201", "--days", "-2", "--json", "--no-interactive"}},
+		{ID: "46-admin-model-download-multiple-list-issues-json", Args: []string{"admin", "model-download", "ls", "--page", "0", "--page-size", "101", "--category", "bad", "--status", "Unknown", "--json", "--no-interactive"}},
 	}
 	results := make([]*snaptest.Result, len(cases))
 	for i := range cases {

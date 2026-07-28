@@ -1,6 +1,6 @@
 ---
 name: crater-cli-admin-job
-version: 0.1.1
+version: 0.2.0
 description: "Use Crater CLI admin job commands to list, delete, lock, keep, and clean jobs."
 metadata:
   requires:
@@ -16,7 +16,7 @@ Use this skill when the user asks for administrator job operations from the CLI.
 
 ## Command Map
 
-- List admin-visible jobs: `crater admin job ls`
+- List admin-visible jobs: `crater admin job ls [--search TEXT] [--page N] [--page-size N] [--all-pages]`
 - Delete a job as admin: `crater admin job delete <jobName>`
 - Lock cleanup: `crater admin job lock <jobName> [--permanent | --days N | --hours N | --minutes N]`
 - Unlock cleanup: `crater admin job unlock <jobName>`
@@ -25,7 +25,9 @@ Use this skill when the user asks for administrator job operations from the CLI.
 
 ## Safe Defaults
 
-Use `crater admin job ls --json --no-interactive` before destructive actions to confirm the exact backend `jobName`. User-facing display names are not always accepted by job APIs.
+Use `crater admin job ls --search <text> --json --no-interactive` before destructive actions to confirm the exact backend `jobName`. The list defaults to 15 records per page (maximum 200); follow `data.pagination`, or use `--all-pages` only when the complete admin-visible set is required. User-facing display names are not always accepted by job APIs.
+
+The admin list uses server pagination and server-supported search/status/type/node/sort filters. When `--owner`, `--from`, or `--to` is present, the CLI fetches all candidate server pages, applies local filters, and re-paginates. Pagination and filter problems are aggregated in one `usage_error`; inspect `context.issues`.
 
 Do not pass negative durations or cleanup thresholds. `lock` requires `--permanent` or at least one positive duration field. Cleanup commands require `--yes` for non-interactive use. Long-running cleanup requires both positive day thresholds; low-GPU cleanup requires positive lookback and wait minutes, with utilization between 0 and 100.
 
@@ -34,7 +36,7 @@ Do not pass negative durations or cleanup thresholds. `lock` requires `--permane
 List a user's jobs as admin:
 
 ```bash
-crater admin job ls --user alice --json --no-interactive
+crater admin job ls --user alice --page-size 15 --json --no-interactive
 ```
 
 Delete a job as admin:

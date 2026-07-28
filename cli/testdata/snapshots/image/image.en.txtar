@@ -403,3 +403,49 @@ Global Flags:
       --json             Output in raw JSON format
       --no-interactive   Disable interactive prompts
 -- en/27-image-build-pip-apt-help/stderr --
+-- en/28-image-ls-multiple-list-issues-json/argv --
+crater image ls --page 0 --page-size 201 --type bad --visibility bad --json --no-interactive
+-- en/28-image-ls-multiple-list-issues-json/exit --
+2
+-- en/28-image-ls-multiple-list-issues-json/stdout --
+-- en/28-image-ls-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1\npage-size must be between 1 and 200\ninvalid image type: bad\ninvalid image visibility: bad",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "page must be at least 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "page-size must be between 1 and 200"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "type",
+        "message": "invalid image type: bad"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "visibility",
+        "message": "invalid image visibility: bad"
+      }
+    ]
+  }
+}
+-- en/29-image-build-ls-invalid-page-json/argv --
+crater image build ls --page 0 --json --no-interactive
+-- en/29-image-build-ls-invalid-page-json/exit --
+2
+-- en/29-image-build-ls-invalid-page-json/stdout --
+-- en/29-image-build-ls-invalid-page-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1"
+}

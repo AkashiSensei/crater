@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/raids-lab/crater/cli/internal/api"
+	"github.com/raids-lab/crater/cli/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -19,11 +21,11 @@ var podCmd = &cobra.Command{
 	},
 }
 
-var podContainersCmd = &cobra.Command{Use: "containers <namespace> <pod>", Short: "List pod containers", Args: exactArgs(2, "namespace", "pod"), RunE: runPodContainers}
-var podEventsCmd = &cobra.Command{Use: "events <namespace> <pod>", Short: "List pod events", Args: exactArgs(2, "namespace", "pod"), RunE: runPodEvents}
-var podLogsCmd = &cobra.Command{Use: "logs <namespace> <pod> <container>", Short: "Show pod container logs", Args: exactArgs(3, "namespace", "pod", "container"), RunE: runPodLogs}
-var podIngressesCmd = &cobra.Command{Use: "ingresses <namespace> <pod>", Short: "List pod ingresses", Args: exactArgs(2, "namespace", "pod"), RunE: runPodIngresses}
-var podNodeportsCmd = &cobra.Command{Use: "nodeports <namespace> <pod>", Short: "List pod nodeports", Args: exactArgs(2, "namespace", "pod"), RunE: runPodNodeports}
+var podContainersCmd = &cobra.Command{Use: "containers [namespace] <pod>", Short: "List pod containers", Args: maxTwoArgs, RunE: runPodContainers}
+var podEventsCmd = &cobra.Command{Use: "events [namespace] <pod>", Short: "List pod events", Args: maxTwoArgs, RunE: runPodEvents}
+var podLogsCmd = &cobra.Command{Use: "logs [namespace] <pod> <container>", Short: "Show pod container logs", Args: maxThreeArgs, RunE: runPodLogs}
+var podIngressesCmd = &cobra.Command{Use: "ingresses [namespace] <pod>", Short: "List pod ingresses", Args: maxTwoArgs, RunE: runPodIngresses}
+var podNodeportsCmd = &cobra.Command{Use: "nodeports [namespace] <pod>", Short: "List pod nodeports", Args: maxTwoArgs, RunE: runPodNodeports}
 
 func maxTwoArgs(cmd *cobra.Command, args []string) error {
 	if len(args) > 2 {
@@ -39,20 +41,85 @@ func maxThreeArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func podNSAndName(args []string) (string, string, error) {
-	ns, err := requiredArg(args, "pod_label_namespace", "namespace")
+func podNamespaceFlag(cmd *cobra.Command) (string, error) {
+	namespace, _ := cmd.Flags().GetString("namespace")
+	namespace = strings.TrimSpace(namespace)
+	if namespace == "" {
+		return "", errUsageFromIssues([]usageIssue{missingIssue("namespace", "pod_label_namespace")})
+	}
+	return namespace, nil
+}
+
+func podNamespaceConflict() error {
+	return errUsageFromIssues([]usageIssue{
+		invalidIssue("namespace", i18n.T("err_pod_namespace_conflict")),
+	})
+}
+
+func podNSAndName(cmd *cobra.Command, args []string) (string, string, error) {
+	if len(args) >= 2 {
+		if cmd.Flags().Changed("namespace") {
+			return "", "", podNamespaceConflict()
+		}
+		namespace, err := requiredArg(args, "pod_label_namespace", "namespace")
+		if err != nil {
+			return "", "", err
+		}
+		name, err := requiredArg(args[1:], "pod_label_name", "pod")
+		if err != nil {
+			return "", "", err
+		}
+		return namespace, name, nil
+	}
+
+	name, err := requiredArg(args, "pod_label_name", "pod")
 	if err != nil {
 		return "", "", err
 	}
-	name, err := requiredArg(args[1:], "pod_label_name", "pod")
+	namespace, err := podNamespaceFlag(cmd)
 	if err != nil {
 		return "", "", err
 	}
-	return ns, name, nil
+	return namespace, name, nil
+}
+
+func podNSNameAndContainer(cmd *cobra.Command, args []string) (string, string, string, error) {
+	if len(args) >= 3 {
+		if cmd.Flags().Changed("namespace") {
+			return "", "", "", podNamespaceConflict()
+		}
+		namespace, err := requiredArg(args, "pod_label_namespace", "namespace")
+		if err != nil {
+			return "", "", "", err
+		}
+		name, err := requiredArg(args[1:], "pod_label_name", "pod")
+		if err != nil {
+			return "", "", "", err
+		}
+		container, err := requiredArg(args[2:], "container_label_name", "container")
+		if err != nil {
+			return "", "", "", err
+		}
+		return namespace, name, container, nil
+	}
+
+	name, err := requiredArg(args, "pod_label_name", "pod")
+	if err != nil {
+		return "", "", "", err
+	}
+	container, err := requiredArg(args[1:], "container_label_name", "container")
+	if err != nil {
+		return "", "", "", err
+	}
+	namespace, err := podNamespaceFlag(cmd)
+	if err != nil {
+		return "", "", "", err
+	}
+	return namespace, name, container, nil
 }
 
 func runPodContainers(cmd *cobra.Command, args []string) error {
-	ns, name, err := podNSAndName(args)
+	ns, name, err := podNSAndName(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -60,7 +127,7 @@ func runPodContainers(cmd *cobra.Command, args []string) error {
 }
 
 func runPodEvents(cmd *cobra.Command, args []string) error {
-	ns, name, err := podNSAndName(args)
+	ns, name, err := podNSAndName(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -68,11 +135,7 @@ func runPodEvents(cmd *cobra.Command, args []string) error {
 }
 
 func runPodLogs(cmd *cobra.Command, args []string) error {
-	ns, name, err := podNSAndName(args)
-	if err != nil {
-		return err
-	}
-	container, err := requiredArg(args[2:], "container_label_name", "container")
+	ns, name, container, err := podNSNameAndContainer(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -88,7 +151,7 @@ func runPodLogs(cmd *cobra.Command, args []string) error {
 }
 
 func runPodIngresses(cmd *cobra.Command, args []string) error {
-	ns, name, err := podNSAndName(args)
+	ns, name, err := podNSAndName(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -96,7 +159,7 @@ func runPodIngresses(cmd *cobra.Command, args []string) error {
 }
 
 func runPodNodeports(cmd *cobra.Command, args []string) error {
-	ns, name, err := podNSAndName(args)
+	ns, name, err := podNSAndName(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -104,6 +167,9 @@ func runPodNodeports(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
+	for _, cmd := range []*cobra.Command{podContainersCmd, podEventsCmd, podLogsCmd, podIngressesCmd, podNodeportsCmd} {
+		cmd.Flags().String("namespace", "", i18n.T("flag_namespace"))
+	}
 	podLogsCmd.Flags().Bool("timestamps", false, "Include timestamps in logs")
 	podLogsCmd.Flags().Bool("previous", false, "Return previous terminated container logs")
 	podLogsCmd.Flags().Int("tail", 0, "Number of recent log lines to show")

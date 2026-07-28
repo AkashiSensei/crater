@@ -143,7 +143,7 @@ func runAuthLogin(cmd *cobra.Command, _ []string) error {
 		PlatformURL: in.platformURL,
 		Username:    in.username,
 		Method:      in.mode,
-		UserID:      loginResp.User.ID,
+		UserID:      int(loginResp.User.ID),
 		Nickname:    loginResp.User.Nickname,
 		Role:        roleToStr(loginResp.Context.RolePlatform),
 	}

@@ -24,7 +24,7 @@
 
 - `category`：错误大类。
 - `code`：稳定错误码。
-- `context`：结构化上下文，例如 `http_status`、`crater_code`、`msg`；多条本地用法错误时可能有 `issues`（`field` / `code` / `message` 数组，见 `auth login` 等非交互聚合校验）。
+- `context`：结构化上下文，例如 `http_status`、`crater_code`、`msg`；多条本地用法错误时可能有 `issues`（`field` / `code` / `message` 数组，分页与领域筛选校验也会采用该聚合形态）。
 - `message`：只用于向用户解释，不作为稳定程序接口。
 
 当领域 Skill 或 reference 有“常见错误与场景”时，优先按其中记录的结构化字段和触发场景判断问题。不要只凭自然语言相似度下结论；若错误字段与记录不一致，应按当前 stderr / `--json` 事实重新分析。
@@ -59,7 +59,7 @@
 ## 排查顺序
 
 1. 先看退出码和 `category`，判断是用法错误、取消、API 错误还是本机系统错误。
-2. 若是 `usage_error`，查看命令帮助并修正参数：`crater <command> --help`。
+2. 若是 `usage_error`，有 `context.issues` 时一次修正其中全部字段；再查看命令帮助确认参数：`crater <command> --help`。
 3. 若是 `api_error` 且 HTTP 为 401，优先检查登录状态或重新登录。
 4. 若是 `api_error` 且 HTTP 为 403，优先检查当前账号权限。
 5. 若是 `system_error`，优先检查本地配置文件、Keyring、HOME 和文件权限。

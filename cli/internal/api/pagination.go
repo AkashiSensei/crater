@@ -5,7 +5,8 @@ import (
 	"strconv"
 )
 
-const defaultCLIPageSize = 50
+// DefaultCLIPageSize keeps interactive list output compact unless callers opt in to more rows.
+const DefaultCLIPageSize = 15
 
 type Page[T any] struct {
 	Items    []T   `json:"items"`
@@ -26,7 +27,7 @@ func (options ListOptions) Normalize() ListOptions {
 		options.Page = 1
 	}
 	if options.PageSize < 1 {
-		options.PageSize = defaultCLIPageSize
+		options.PageSize = DefaultCLIPageSize
 	}
 	return options
 }

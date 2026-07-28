@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,6 +27,14 @@ var nodeCmd = &cobra.Command{
 		return cmd.Help()
 	},
 }
+
+var (
+	podStatuses = []string{"Pending", "Running", "Succeeded", "Failed", "Unknown"}
+	podTypes    = []string{
+		"batch.volcano.sh/v1alpha1/Job",
+		"aisystem.github.com/v1alpha1/AIJob",
+	}
+)
 
 var nodeLsCmd = &cobra.Command{
 	Use:   "ls",
@@ -173,8 +183,12 @@ func runNodeGet(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runNodePods(_ *cobra.Command, args []string) error {
+func runNodePods(cmd *cobra.Command, args []string) error {
 	name, err := requiredArg(args, "node_label_name", "name")
+	if err != nil {
+		return err
+	}
+	options, err := readNodePodListOptions(cmd)
 	if err != nil {
 		return err
 	}
@@ -186,13 +200,134 @@ func runNodePods(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return cliErrFromAPI(err)
 	}
-	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{
-			"pods": pods,
-		}))
+	normalizePodTypes(pods)
+	pods = filterNodePods(pods, options)
+	sort.SliceStable(pods, func(left, right int) bool {
+		if pods[left].Name != pods[right].Name {
+			return pods[left].Name < pods[right].Name
+		}
+		return pods[left].Namespace < pods[right].Namespace
+	})
+	page := paginateList(pods, options.ListOptions)
+	return writeListPage("pods", page, options.AllPages, printNodePodTable)
+}
+
+type nodePodListOptions struct {
+	api.ListOptions
+	Namespace     string
+	Status        string
+	PodType       string
+	Search        string
+	AllNamespaces bool
+}
+
+func readNodePodListOptions(cmd *cobra.Command) (nodePodListOptions, error) {
+	listOptions, issues := listPaginationOptions(cmd, maxCLIPageSize)
+	namespace, _ := cmd.Flags().GetString("namespace")
+	status, _ := cmd.Flags().GetString("status")
+	podType, _ := cmd.Flags().GetString("type")
+	search, _ := cmd.Flags().GetString("search")
+	allNamespaces, _ := cmd.Flags().GetBool("all-namespaces")
+	namespace = strings.TrimSpace(namespace)
+	status = strings.TrimSpace(status)
+	podType = strings.TrimSpace(podType)
+	search = strings.TrimSpace(search)
+
+	if allNamespaces && cmd.Flags().Changed("namespace") {
+		issues = append(issues, invalidIssue(
+			"all-namespaces",
+			i18n.T("err_namespace_all_conflict"),
+		))
 	}
-	printNodePodTable(pods)
-	return nil
+	if !allNamespaces && namespace == "" {
+		if cmd.Flags().Changed("namespace") {
+			issues = append(issues, invalidIssue("namespace", i18n.T("err_namespace_empty")))
+		} else {
+			issues = append(issues, usageIssue{
+				Code:    errorcodes.ErrMissingRequiredFlag,
+				Message: i18n.T("err_namespace_or_all_required"),
+				Field:   "namespace",
+			})
+		}
+	}
+	if status != "" && !slices.Contains(podStatuses, status) {
+		issues = append(issues, invalidIssue("status", i18n.T("err_invalid_pod_status", status)))
+	}
+	if podType != "" && !slices.Contains(podTypes, podType) {
+		issues = append(issues, invalidIssue("type", i18n.T("err_invalid_pod_type", podType)))
+	}
+	if len(issues) > 0 {
+		return nodePodListOptions{}, errUsageFromIssues(issues)
+	}
+	return nodePodListOptions{
+		ListOptions:   listOptions,
+		Namespace:     namespace,
+		Status:        status,
+		PodType:       podType,
+		Search:        search,
+		AllNamespaces: allNamespaces,
+	}, nil
+}
+
+func filterNodePods(pods []api.PodInfo, options nodePodListOptions) []api.PodInfo {
+	search := strings.ToLower(options.Search)
+	filtered := pods[:0]
+	for _, pod := range pods {
+		if !options.AllNamespaces && pod.Namespace != options.Namespace {
+			continue
+		}
+		if options.Status != "" && pod.Status != options.Status {
+			continue
+		}
+		if options.PodType != "" && pod.Type != options.PodType {
+			continue
+		}
+		if search != "" && !strings.Contains(strings.ToLower(pod.Name), search) {
+			continue
+		}
+		filtered = append(filtered, pod)
+	}
+	return filtered
+}
+
+func normalizePodTypes(pods []api.PodInfo) {
+	for index := range pods {
+		if pods[index].Type != "" || len(pods[index].OwnerReference) == 0 {
+			continue
+		}
+		if podType, ok := ownerReferencePodType(pods[index].OwnerReference); ok {
+			pods[index].Type = podType
+		}
+	}
+}
+
+func ownerReferencePodType(references []api.OwnerReference) (string, bool) {
+	for _, reference := range references {
+		if reference.Controller != nil && *reference.Controller {
+			if podType, ok := podTypeFromOwnerReference(reference); ok {
+				return podType, true
+			}
+		}
+	}
+	for _, reference := range references {
+		podType, ok := podTypeFromOwnerReference(reference)
+		if ok && slices.Contains(podTypes, podType) {
+			return podType, true
+		}
+	}
+	for _, reference := range references {
+		if podType, ok := podTypeFromOwnerReference(reference); ok {
+			return podType, true
+		}
+	}
+	return "", false
+}
+
+func podTypeFromOwnerReference(reference api.OwnerReference) (string, bool) {
+	if reference.APIVersion == "" || reference.Kind == "" {
+		return "", false
+	}
+	return reference.APIVersion + "/" + reference.Kind, true
 }
 
 func runNodeGPU(_ *cobra.Command, args []string) error {
@@ -331,6 +466,14 @@ func init() {
 	nodeLsCmd.Flags().Bool("gpu-available", false, "Only show nodes with available matching GPU")
 	completion.RegisterFlagValue([]string{"node", "ls"}, "status", staticValueCompleter([]string{"Ready", "NotReady", "Unschedulable", "Occupied"}, nil))
 	completion.RegisterFlagValue([]string{"node", "ls"}, "arch", staticValueCompleter([]string{"amd64", "arm64"}, nil))
+	nodePodsCmd.Flags().String("namespace", "", i18n.T("flag_node_pod_namespace"))
+	nodePodsCmd.Flags().Bool("all-namespaces", false, i18n.T("flag_all-namespaces"))
+	nodePodsCmd.Flags().String("status", "", i18n.T("flag_status"))
+	nodePodsCmd.Flags().String("type", "", i18n.T("flag_type"))
+	nodePodsCmd.Flags().String("search", "", i18n.T("flag_search"))
+	addListPaginationFlags(nodePodsCmd)
+	completion.RegisterFlagValue([]string{"node", "pods"}, "status", staticValueCompleter(podStatuses, nil))
+	completion.RegisterFlagValue([]string{"node", "pods"}, "type", staticValueCompleter(podTypes, nil))
 	nodeCmd.AddCommand(nodeLsCmd)
 	nodeCmd.AddCommand(nodeGetCmd)
 	nodeCmd.AddCommand(nodePodsCmd)

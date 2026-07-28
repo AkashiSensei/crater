@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/raids-lab/crater/cli/internal/api"
@@ -20,6 +21,7 @@ var (
 	orderTypes          = []string{"job", "dataset"}
 	orderEditableStatus = []string{"Pending"}
 	orderReviewStatuses = []string{"Approved", "Rejected", "Canceled"}
+	orderListStatuses   = []string{"Pending", "Approved", "Rejected", "Canceled"}
 )
 
 var orderCmd = &cobra.Command{
@@ -48,11 +50,130 @@ var adminOrderRejectCmd = &cobra.Command{Use: "reject <id>", Short: "Reject an a
 var adminOrderCheckCmd = &cobra.Command{Use: "check", Short: "Cancel invalid pending job approval orders", Args: noArgs, RunE: runAdminOrderCheck}
 
 func runOrderLs(cmd *cobra.Command, _ []string) error {
-	return runRawRead(cmd, rawReadSpec{PayloadKey: "orders", Path: api.ApprovalOrderPrefix, Params: noParams, Table: printOrderTable})
+	return listApprovalOrders(cmd, false)
 }
 
 func runAdminOrderLs(cmd *cobra.Command, _ []string) error {
-	return runRawRead(cmd, rawReadSpec{PayloadKey: "orders", Path: api.AdminApprovalPrefix, Params: noParams, Table: printOrderTable})
+	return listApprovalOrders(cmd, true)
+}
+
+type orderListOptions struct {
+	api.ListOptions
+	Admin   bool
+	Status  string
+	Type    string
+	Creator string
+	Search  string
+}
+
+func listApprovalOrders(cmd *cobra.Command, admin bool) error {
+	options, err := readOrderListOptions(cmd, admin)
+	if err != nil {
+		return err
+	}
+	client, err := activeAPIClient()
+	if err != nil {
+		return err
+	}
+	orders, err := client.ListApprovalOrders(admin)
+	if err != nil {
+		return cliErrFromAPI(err)
+	}
+	orders = filterApprovalOrders(orders, options)
+	sortApprovalOrders(orders)
+	page := paginateList(orders, options.ListOptions)
+	return writeListPage("orders", page, options.AllPages, printOrderTable)
+}
+
+func readOrderListOptions(cmd *cobra.Command, admin bool) (orderListOptions, error) {
+	listOptions, issues := listPaginationOptions(cmd, maxCLIPageSize)
+	status, _ := cmd.Flags().GetString("status")
+	orderType, _ := cmd.Flags().GetString("type")
+	search, _ := cmd.Flags().GetString("search")
+	status = strings.TrimSpace(status)
+	orderType = strings.TrimSpace(orderType)
+	search = strings.TrimSpace(search)
+
+	creator := ""
+	if admin {
+		creator, _ = cmd.Flags().GetString("creator")
+		creator = strings.TrimSpace(creator)
+	}
+	if status != "" && !slices.Contains(orderListStatuses, status) {
+		issues = append(issues, invalidIssue("status", i18n.T("err_invalid_status", status)))
+	}
+	if orderType != "" && !slices.Contains(orderTypes, orderType) {
+		issues = append(issues, invalidIssue("type", i18n.T("err_invalid_order_type", orderType)))
+	}
+	if len(issues) > 0 {
+		return orderListOptions{}, errUsageFromIssues(issues)
+	}
+	return orderListOptions{
+		ListOptions: listOptions,
+		Admin:       admin,
+		Status:      status,
+		Type:        orderType,
+		Creator:     creator,
+		Search:      search,
+	}, nil
+}
+
+func filterApprovalOrders(
+	orders []api.ApprovalOrder,
+	options orderListOptions,
+) []api.ApprovalOrder {
+	creator := strings.ToLower(options.Creator)
+	search := strings.ToLower(options.Search)
+	filtered := make([]api.ApprovalOrder, 0, len(orders))
+	for _, order := range orders {
+		if options.Status != "" && order.Status != options.Status {
+			continue
+		}
+		if options.Type != "" && order.Type != options.Type {
+			continue
+		}
+		creatorUsername := strings.ToLower(order.Creator.Username)
+		creatorNickname := strings.ToLower(order.Creator.Nickname)
+		if options.Admin && creator != "" &&
+			!strings.Contains(creatorUsername, creator) &&
+			!strings.Contains(creatorNickname, creator) {
+			continue
+		}
+		if search != "" &&
+			!strings.Contains(strings.ToLower(order.Name), search) &&
+			!strings.Contains(creatorUsername, search) &&
+			!strings.Contains(creatorNickname, search) {
+			continue
+		}
+		filtered = append(filtered, order)
+	}
+	return filtered
+}
+
+func sortApprovalOrders(orders []api.ApprovalOrder) {
+	statusRank := map[string]int{
+		"Pending": 0, "Approved": 1, "Rejected": 2, "Canceled": 3,
+	}
+	sort.SliceStable(orders, func(left, right int) bool {
+		leftStatus, ok := statusRank[orders[left].Status]
+		if !ok {
+			leftStatus = len(statusRank)
+		}
+		rightStatus, ok := statusRank[orders[right].Status]
+		if !ok {
+			rightStatus = len(statusRank)
+		}
+		if leftStatus != rightStatus {
+			return leftStatus < rightStatus
+		}
+		if orders[left].Status != orders[right].Status {
+			return orders[left].Status < orders[right].Status
+		}
+		if !orders[left].CreatedAt.Equal(orders[right].CreatedAt) {
+			return orders[left].CreatedAt.After(orders[right].CreatedAt)
+		}
+		return orders[left].ID > orders[right].ID
+	})
 }
 
 func runOrderGet(cmd *cobra.Command, args []string) error {
@@ -76,7 +197,22 @@ func runOrderByName(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runRawRead(cmd, rawReadSpec{PayloadKey: "orders", Path: api.ApprovalOrderPrefix + "/name/" + name, Params: noParams, Table: printOrderTable})
+	client, err := activeAPIClient()
+	if err != nil {
+		return err
+	}
+	orders, err := client.ListApprovalOrdersByName(name)
+	if err != nil {
+		return cliErrFromAPI(err)
+	}
+	if outputJSON {
+		return output.WriteSuccessJSON(
+			os.Stdout,
+			output.SuccessEnvelope(map[string]interface{}{"orders": orders}),
+		)
+	}
+	printOrderTable(orders)
+	return nil
 }
 
 func runOrderSubmit(cmd *cobra.Command, _ []string) error {
@@ -397,14 +533,42 @@ func writeOrderMessage(key string, message string) error {
 	return nil
 }
 
-func printOrderTable(data interface{}) {
-	fmt.Printf("%s %s %s %s %s %s\n", i18n.PadRight(i18n.T("table_id"), 8), i18n.PadRight(i18n.T("table_name"), 28), i18n.PadRight(i18n.T("table_type"), 16), i18n.PadRight(i18n.T("table_status"), 14), i18n.PadRight("CREATOR", 18), i18n.PadRight("CREATED", 22))
-	for _, row := range rawList(data) {
-		fmt.Printf("%s %s %s %s %s %s\n", i18n.PadRight(rawString(row, "id"), 8), i18n.PadRight(rawString(row, "name"), 28), i18n.PadRight(rawString(row, "type"), 16), i18n.PadRight(rawString(row, "status"), 14), i18n.PadRight(rawNestedString(row, "creator", "nickname"), 18), i18n.PadRight(rawString(row, "createdAt"), 22))
+func printOrderTable(orders []api.ApprovalOrder) {
+	fmt.Printf("%s %s %s %s %s %s\n",
+		i18n.PadRight(i18n.T("table_id"), 8),
+		i18n.PadRight(i18n.T("table_name"), 28),
+		i18n.PadRight(i18n.T("table_type"), 16),
+		i18n.PadRight(i18n.T("table_status"), 14),
+		i18n.PadRight(i18n.T("table_owner"), 18),
+		i18n.PadRight(i18n.T("table_created_at"), 22))
+	for _, order := range orders {
+		creator := order.Creator.Nickname
+		if creator == "" {
+			creator = order.Creator.Username
+		}
+		fmt.Printf("%s %s %s %s %s %s\n",
+			i18n.PadRight(fmt.Sprint(order.ID), 8),
+			i18n.PadRight(order.Name, 28),
+			i18n.PadRight(order.Type, 16),
+			i18n.PadRight(order.Status, 14),
+			i18n.PadRight(creator, 18),
+			i18n.PadRight(formatAPITime(order.CreatedAt), 22))
+	}
+}
+
+func addOrderListFlags(cmd *cobra.Command, admin bool) {
+	addListPaginationFlags(cmd)
+	cmd.Flags().String("status", "", i18n.T("flag_status"))
+	cmd.Flags().String("type", "", i18n.T("flag_type"))
+	cmd.Flags().String("search", "", i18n.T("flag_search"))
+	if admin {
+		cmd.Flags().String("creator", "", i18n.T("flag_creator"))
 	}
 }
 
 func init() {
+	addOrderListFlags(orderLsCmd, false)
+
 	orderSubmitCmd.Flags().String("name", "", "Approval target name")
 	orderSubmitCmd.Flags().String("type", "job", "Approval order type")
 	orderSubmitCmd.Flags().Uint("type-id", 0, "Approval target numeric ID")
@@ -428,10 +592,15 @@ func init() {
 	adminOrderApproveCmd.Flags().String("review-notes", "", "Review notes")
 	adminOrderRejectCmd.Flags().String("review-notes", "", "Review notes")
 	adminOrderCheckCmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
+	addOrderListFlags(adminOrderLsCmd, true)
 
 	completion.RegisterFlagValue([]string{"order", "submit"}, "type", staticValueCompleter(orderTypes, nil))
 	completion.RegisterFlagValue([]string{"order", "edit"}, "type", staticValueCompleter(orderTypes, nil))
 	completion.RegisterFlagValue([]string{"order", "edit"}, "status", staticValueCompleter(orderEditableStatus, nil))
+	completion.RegisterFlagValue([]string{"order", "ls"}, "status", staticValueCompleter(orderListStatuses, nil))
+	completion.RegisterFlagValue([]string{"order", "ls"}, "type", staticValueCompleter(orderTypes, nil))
+	completion.RegisterFlagValue([]string{"admin", "order", "ls"}, "status", staticValueCompleter(orderListStatuses, nil))
+	completion.RegisterFlagValue([]string{"admin", "order", "ls"}, "type", staticValueCompleter(orderTypes, nil))
 
 	orderCmd.AddCommand(orderLsCmd, orderGetCmd, orderByNameCmd, orderSubmitCmd, orderEditCmd, orderCancelCmd)
 	rootCmd.AddCommand(orderCmd)

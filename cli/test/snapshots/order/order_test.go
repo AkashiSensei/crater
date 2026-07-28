@@ -38,6 +38,7 @@ func runOrderSnapshots(t *testing.T, lang string) {
 		{ID: "12-admin-approve-404-json", Args: []string{"admin", "order", "approve", "1", "--json", "--no-interactive"}},
 		{ID: "13-admin-reject-404-json", Args: []string{"admin", "order", "reject", "1", "--review-notes", "no", "--json", "--no-interactive"}},
 		{ID: "14-admin-check-404-json", Args: []string{"admin", "order", "check", "--yes", "--json", "--no-interactive"}},
+		{ID: "15-admin-ls-multiple-list-issues-json", Args: []string{"admin", "order", "ls", "--page", "0", "--page-size", "201", "--status", "Unknown", "--type", "model", "--json", "--no-interactive"}},
 	}
 	results := make([]*snaptest.Result, len(cases))
 	for i := range cases {

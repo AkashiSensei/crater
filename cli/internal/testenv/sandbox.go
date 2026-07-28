@@ -19,6 +19,7 @@ func SandboxHTTPMode() string {
 	// When sandboxing HTTP, set CRATER_TEST_SANDBOX_HTTP:
 	// - "1"/"true"/... => default "timeout"
 	// - "timeout"|"hang"|"error404"|... => explicit mode (case-insensitive)
+	// - "passthrough" => allow a loopback snapshot fixture server
 	raw := strings.TrimSpace(os.Getenv("CRATER_TEST_SANDBOX_HTTP"))
 	if truthyEnv(raw) {
 		return "timeout"
@@ -30,7 +31,7 @@ func SandboxHTTPMode() string {
 
 	mode := strings.ToLower(raw)
 	switch mode {
-	case "", "timeout", "hang", "error404", "404":
+	case "", "timeout", "hang", "error404", "404", "passthrough":
 		// ok ("" already handled above)
 	default:
 		if SandboxEnabled() {

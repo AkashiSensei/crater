@@ -1,6 +1,6 @@
 ---
 name: crater-cli-job
-version: 0.1.1
+version: 0.2.0
 description: "Use Crater CLI job commands to list, inspect, create, stop, and snapshot jobs."
 metadata:
   requires:
@@ -16,8 +16,9 @@ Use this skill when the user asks to operate Crater jobs from the CLI: list jobs
 
 ## Command Map
 
-- List jobs: `crater job ls`
-- Detail surfaces: `crater job get|pods|events|yaml|template <jobName>`
+- List jobs: `crater job ls [--search TEXT] [--page N] [--page-size N] [--all-pages]`
+- Detail surfaces: `crater job get|events|yaml|template <jobName>`
+- Pod list: `crater job pods <jobName> [--status STATUS] [--search TEXT] [--page N] [--page-size N] [--all-pages]`
 - Access helpers: `crater job token <jobName>`, `crater job secret <jobName>`, `crater job ssh <jobName>`
 - Lifecycle helpers: `crater job snapshot <jobName>`, `crater job alert <jobName>`, `crater job delete <jobName>`
 - Create interactive jobs: `crater job create jupyter|webide ...`
@@ -26,7 +27,11 @@ Use this skill when the user asks to operate Crater jobs from the CLI: list jobs
 
 ## Safe Defaults
 
-Use `crater job ls --json --no-interactive` before destructive actions to confirm the exact `jobName`. User-facing display names are not always accepted by job APIs.
+Use `crater job ls --search <text> --json --no-interactive` before destructive actions to confirm the exact `jobName`. The list defaults to page 1 with 15 records (maximum page size 200); follow `data.pagination` rather than assuming the first page is complete. User-facing display names are not always accepted by job APIs.
+
+Job list pagination is server-side. When `--owner`, `--from`, or `--to` is used, the CLI fetches all candidate server pages, applies those local filters, and re-paginates the filtered result. `--all-pages` starts at the first server page and omits `data.pagination`.
+
+`job get|pods|events|yaml` locate resources through the job API and preserve the backend's real namespace. Direct `crater pod ...` diagnostics require an explicit namespace; `crater node pods` requires either `--namespace` or `--all-namespaces`. Do not invent a fixed namespace for either path.
 
 For create commands, validate resource values before calling the platform. CPU, memory, and GPU counts must not be negative; task replicas must be positive. Workspace mounts use `subPath:mountPath`; dataset mounts use `datasetID:mountPath`; forwards use `name:port`.
 
@@ -37,14 +42,14 @@ For Jupyter/WebIDE access commands, the returned token or password is sensitive.
 List running GPU jobs for a user:
 
 ```bash
-crater job ls --user alice --status Running --json --no-interactive
+crater job ls --user alice --status Running --page-size 15 --json --no-interactive
 ```
 
 Inspect a job:
 
 ```bash
 crater job get jpt-alice-abcde --json --no-interactive
-crater job pods jpt-alice-abcde --json --no-interactive
+crater job pods jpt-alice-abcde --status Running --page-size 15 --json --no-interactive
 crater job events jpt-alice-abcde --json --no-interactive
 ```
 
@@ -76,3 +81,5 @@ crater job delete jpt-alice-abcde --yes --json --no-interactive
 ## Notes
 
 `crater job create tensorflow|pytorch` intentionally uses `--file` because the backend accepts a nested `tasks[]` request. The CLI rejects unknown JSON fields. Keep the JSON aligned with the backend DTO fields: `name`, `tasks`, `resource`, `image.imageLink`, `volumeMounts`, `envs`, `selectors`, `alertEnabled`, `template`, and optional scheduling fields. Distributed TensorFlow and PyTorch jobs do not support backfill scheduling.
+
+Pagination and job filter validation are aggregated. If a JSON `usage_error` contains `context.issues`, fix all listed fields before retrying.

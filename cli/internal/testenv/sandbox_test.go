@@ -79,7 +79,7 @@ func TestSandboxHTTPMode_globalSandboxEmptyFallsBackToTimeout(t *testing.T) {
 func TestSandboxHTTPMode_explicitAllowedModes(t *testing.T) {
 	// When sandbox is not enabled, explicit allowed modes still opt into HTTP simulation.
 	t.Setenv("CRATER_TEST_SANDBOX", "")
-	for _, v := range []string{"timeout", "hang", "error404", "404"} {
+	for _, v := range []string{"timeout", "hang", "error404", "404", "passthrough"} {
 		t.Setenv("CRATER_TEST_SANDBOX_HTTP", v)
 		if got := SandboxHTTPMode(); got != v {
 			t.Fatalf("SandboxHTTPMode(HTTP=%q)=%q want %q", v, got, v)
@@ -90,9 +90,10 @@ func TestSandboxHTTPMode_explicitAllowedModes(t *testing.T) {
 func TestSandboxHTTPMode_explicitAllowedModesAreCaseInsensitive(t *testing.T) {
 	t.Setenv("CRATER_TEST_SANDBOX", "")
 	cases := map[string]string{
-		" Timeout ": "timeout",
-		"HANG":      "hang",
-		"Error404":  "error404",
+		" Timeout ":   "timeout",
+		"HANG":        "hang",
+		"Error404":    "error404",
+		"PassThrough": "passthrough",
 	}
 	for in, want := range cases {
 		t.Setenv("CRATER_TEST_SANDBOX_HTTP", in)

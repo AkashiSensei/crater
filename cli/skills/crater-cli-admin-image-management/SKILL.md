@@ -1,6 +1,6 @@
 ---
 name: crater-cli-admin-image-management
-version: 1.0.0
+version: 1.1.0
 description: "Crater CLI 管理员镜像管理：指导 AI Agent 使用 crater admin image 查看、删除、修改所有用户镜像、镜像构建记录与 CUDA base image。仅在用户明确要求管理员/平台级镜像操作时使用。"
 metadata:
   requires:
@@ -17,9 +17,9 @@ metadata:
 ## 命令
 
 ```bash
-crater admin image build-ls --json
+crater admin image build-ls --page-size 15 --json
 crater admin image build-remove --ids 1,2 --json --no-interactive
-crater admin image ls --json
+crater admin image ls --owner alice --page-size 15 --json
 crater admin image delete-many --ids 1,2 --json --no-interactive
 crater admin image description 1 --description "Updated" --json --no-interactive
 crater admin image type 1 --type jupyter --json --no-interactive
@@ -35,4 +35,6 @@ crater admin image cuda delete 1 --json --no-interactive
 - 管理员命令统一使用 `crater admin image ...` 前缀；不要使用 `--admin`。
 - 修改/删除操作会影响平台级镜像资源，执行前确认用户明确要求管理员操作。
 - 优先使用 `--json --no-interactive`，读取 `stdout.data.message` 或对应数据键。
+- `admin image ls` 与 `admin image build-ls` 先保留接口顺序并本地分页，默认每页 `15` 条、最大 `200`。JSON 分别读取 `data.images` / `data.builds` 和 `data.pagination`；只有明确需要全部记录时使用 `--all-pages`。
+- 分页与 visibility 等筛选错误会聚合；stderr JSON 有 `context.issues` 时一次修正全部字段。
 - 403 表示 active credentials 不是平台管理员或权限不足。

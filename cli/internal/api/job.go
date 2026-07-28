@@ -39,6 +39,7 @@ type JobListOptions struct {
 	All         bool
 	Admin       bool
 	Username    string
+	Search      string
 	Days        int
 	Status      string
 	JobType     string
@@ -248,6 +249,9 @@ func jobListValues(options JobListOptions) url.Values {
 	values := options.ListOptions.Values()
 	if options.Days != 0 {
 		values.Set("days", strconv.Itoa(options.Days))
+	}
+	if options.Search != "" {
+		values.Set("search", options.Search)
 	}
 	if options.Status != "" {
 		values.Set("status", options.Status)

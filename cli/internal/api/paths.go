@@ -45,8 +45,10 @@ const ModelDownloadCreatePath = ModelDownloadPrefix + "/download"
 const ModelDownloadListPath = ModelDownloadPrefix + "/downloads"
 
 const (
-	ImageAvailablePath = ImagesPrefix + "/available"
-	ImageListPath      = ImagesPrefix + "/image"
-	NodeListPath       = NodesPrefix
-	VCJobListPath      = VCJobsPrefix
+	ImageAvailablePath    = ImagesPrefix + "/available"
+	ImageListPath         = ImagesPrefix + "/image"
+	NodeListPath          = NodesPrefix
+	VCJobListPath         = VCJobsPrefix
+	VCJobBillingPath      = VCJobsPrefix + "/billing"
+	AdminVCJobBillingPath = AdminVCJobsPrefix + "/billing"
 )

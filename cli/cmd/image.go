@@ -102,26 +102,18 @@ func imageCommandGroup(use, short string) *cobra.Command {
 }
 
 func runImageBuildLs(cmd *cobra.Command, _ []string) error {
-	client, err := activeAPIClient()
-	if err != nil {
-		return err
-	}
-	resp, err := client.ListKaniko(false)
-	if err != nil {
-		return cliErrFromAPI(err)
-	}
-	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{"builds": resp.KanikoList}))
-	}
-	printKanikoTable(resp.KanikoList)
-	return nil
+	return runImageBuildList(cmd, false)
 }
 
 func runAdminImageBuildLs(cmd *cobra.Command, _ []string) error {
 	return runImageBuildList(cmd, true)
 }
 
-func runImageBuildList(_ *cobra.Command, admin bool) error {
+func runImageBuildList(cmd *cobra.Command, admin bool) error {
+	options, err := readListPaginationOptions(cmd)
+	if err != nil {
+		return err
+	}
 	client, err := activeAPIClient()
 	if err != nil {
 		return err
@@ -130,11 +122,8 @@ func runImageBuildList(_ *cobra.Command, admin bool) error {
 	if err != nil {
 		return cliErrFromAPI(err)
 	}
-	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{"builds": resp.KanikoList}))
-	}
-	printKanikoTable(resp.KanikoList)
-	return nil
+	page := paginateList(resp.KanikoList, options)
+	return writeListPage("builds", page, options.AllPages, printKanikoTable)
 }
 
 func runImageBuildPipApt(cmd *cobra.Command, _ []string) error {
@@ -263,23 +252,9 @@ func runImageBuildPod(_ *cobra.Command, args []string) error {
 }
 
 func runImageLs(cmd *cobra.Command, _ []string) error {
-	taskType, _ := cmd.Flags().GetString("type")
-	visibility, _ := cmd.Flags().GetString("visibility")
-	taskType = strings.TrimSpace(taskType)
-	visibility = strings.TrimSpace(visibility)
-	if taskType != "" && !slices.Contains(imageTaskFilterTypes, taskType) {
-		return errUsageFromIssues([]usageIssue{{
-			Code:    errorcodes.ErrInvalidFlagValue,
-			Message: i18n.T("err_invalid_image_type", taskType),
-			Field:   "type",
-		}})
-	}
-	if visibility != "" && !slices.Contains(imageVisibilityTypes, visibility) {
-		return errUsageFromIssues([]usageIssue{{
-			Code:    errorcodes.ErrInvalidFlagValue,
-			Message: i18n.T("err_invalid_image_visibility", visibility),
-			Field:   "visibility",
-		}})
+	options, taskType, err := readImageListOptions(cmd, true)
+	if err != nil {
+		return err
 	}
 	client, err := activeAPIClient()
 	if err != nil {
@@ -303,14 +278,15 @@ func runImageLs(cmd *cobra.Command, _ []string) error {
 		images = filterImagesByTaskType(images, taskType)
 	}
 	images = filterImages(cmd, images)
-	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{"images": images}))
-	}
-	printImageTable(images)
-	return nil
+	page := paginateList(images, options)
+	return writeListPage("images", page, options.AllPages, printImageTable)
 }
 
 func runAdminImageLs(cmd *cobra.Command, _ []string) error {
+	options, _, err := readImageListOptions(cmd, false)
+	if err != nil {
+		return err
+	}
 	client, err := activeAPIClient()
 	if err != nil {
 		return err
@@ -320,11 +296,38 @@ func runAdminImageLs(cmd *cobra.Command, _ []string) error {
 		return cliErrFromAPI(err)
 	}
 	images := filterImages(cmd, resp.ImageList)
-	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{"images": images}))
+	page := paginateList(images, options)
+	return writeListPage("images", page, options.AllPages, printImageTable)
+}
+
+func readImageListOptions(
+	cmd *cobra.Command,
+	includeTaskType bool,
+) (api.ListOptions, string, error) {
+	options, issues := listPaginationOptions(cmd, maxCLIPageSize)
+	taskType := ""
+	if includeTaskType {
+		taskType, _ = cmd.Flags().GetString("type")
+		taskType = strings.TrimSpace(taskType)
+		if taskType != "" && !slices.Contains(imageTaskFilterTypes, taskType) {
+			issues = append(issues, invalidIssue(
+				"type",
+				i18n.T("err_invalid_image_type", taskType),
+			))
+		}
 	}
-	printImageTable(images)
-	return nil
+	visibility, _ := cmd.Flags().GetString("visibility")
+	visibility = strings.TrimSpace(visibility)
+	if visibility != "" && !slices.Contains(imageVisibilityTypes, visibility) {
+		issues = append(issues, invalidIssue(
+			"visibility",
+			i18n.T("err_invalid_image_visibility", visibility),
+		))
+	}
+	if len(issues) > 0 {
+		return api.ListOptions{}, "", errUsageFromIssues(issues)
+	}
+	return options, taskType, nil
 }
 
 func filterImagesByTaskType(images []api.ImageInfo, taskType string) []api.ImageInfo {
@@ -1074,8 +1077,10 @@ func init() {
 	imageBuildEnvdCmd.Flags().String("base", "", "envd base image")
 	imageBuildEnvdCmd.Flags().String("build-source", "EnvdAdvanced", "envd build source")
 	imageBuildRemoveCmd.Flags().String("ids", "", "Comma-separated IDs")
+	addListPaginationFlags(imageBuildLsCmd)
 	imageBuildCmd.AddCommand(imageBuildLsCmd, imageBuildPipAptCmd, imageBuildDockerfileCmd, imageBuildEnvdCmd, imageBuildRemoveCmd, imageBuildGetCmd, imageBuildTemplateCmd, imageBuildPodCmd)
 
+	addListPaginationFlags(imageLsCmd)
 	imageLsCmd.Flags().Bool("available", false, "List images available for creating jobs")
 	imageLsCmd.Flags().String("type", "", "Filter by job type")
 	imageLsCmd.Flags().String("arch", "", "Filter by image architecture")
@@ -1121,12 +1126,16 @@ func init() {
 	adminImageCudaAddCmd.Flags().String("image-label", "", "Image label")
 	adminImageCudaAddCmd.Flags().String("label", "", "Display label")
 	adminImageCudaAddCmd.Flags().String("value", "", "Image value")
+	addListPaginationFlags(adminImageBuildLsCmd)
+	addListPaginationFlags(adminImageLsCmd)
 
 	completion.RegisterFlagValue([]string{"image", "ls"}, "type", staticValueCompleter(imageTaskFilterTypes, nil))
 	completion.RegisterFlagValue([]string{"image", "ls"}, "arch", staticValueCompleter(imageArchitectures, nil))
+	completion.RegisterFlagValue([]string{"admin", "image", "ls"}, "arch", staticValueCompleter(imageArchitectures, nil))
 	completion.RegisterFlagValue([]string{"image", "arch"}, "archs", staticValueCompleter(imageArchitectures, nil))
 	completion.RegisterFlagValue([]string{"admin", "image", "arch"}, "archs", staticValueCompleter(imageArchitectures, nil))
 	completion.RegisterFlagValue([]string{"image", "ls"}, "visibility", staticValueCompleter(imageVisibilityTypes, nil))
+	completion.RegisterFlagValue([]string{"admin", "image", "ls"}, "visibility", staticValueCompleter(imageVisibilityTypes, nil))
 	completion.RegisterFlagValue([]string{"image", "upload"}, "type", staticValueCompleter(imageTaskWriteTypes, nil))
 	completion.RegisterFlagValue([]string{"image", "type"}, "type", staticValueCompleter(imageTaskWriteTypes, nil))
 	completion.RegisterFlagValue([]string{"admin", "image", "type"}, "type", staticValueCompleter(imageTaskWriteTypes, nil))

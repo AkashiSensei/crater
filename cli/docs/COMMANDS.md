@@ -16,6 +16,21 @@
 - `--help, -h`:
   - **行为**: 显示当前命令或子命令的帮助信息。
 
+### 公共列表分页 (List Pagination)
+
+采用公共列表分页契约的命令会显式提供以下选项；未提供这些选项的低基数列表不受本节影响：
+
+- `--page` (int, default `1`): 当前页，从 `1` 开始。
+- `--page-size` (int, default `15`): 每页数量。公共上限为 `200`；`crater download ls` 及兼容的 `model-download ls`/管理员列表上限为 `100`。
+- `--all-pages` (bool): 从第一页开始返回全部筛选结果；此时 `--page` 不决定起始页。服务端分页命令在未显式提供 `--page-size` 时使用该端点允许的最大批量，显式提供的合法值仍优先。
+
+共同语义：
+
+- `--page` 必须大于等于 `1`；`--page-size` 必须在对应命令允许范围内。分页参数与状态、类型等领域筛选参数会在发请求前一起校验；存在多个问题时按「用法错误聚合」返回一次 `usage_error`。
+- 服务端分页命令把分页和服务端支持的筛选参数传给 API；本地分页命令先取得端点返回的完整数组，再筛选、稳定排序（若命令另有排序约定）并分页。混合分页命令需要本地筛选时，会先顺序读取全部服务端候选页，再本地筛选并重新分页。
+- 默认 JSON 成功体在 `data` 中同时包含资源数组与 `pagination: {"page": N, "page_size": N, "total": N}`；`total` 是筛选后的总数。`--all-pages` 返回完整数组并省略 `pagination`。
+- 默认表格只展示当前页，并在末尾显示当前页码和筛选后的总数；`--all-pages` 不显示分页摘要。
+
 ### 错误处理规范 (Error Handling)
 
 所有错误必须通过 `stderr` 输出，其格式受 `--json` 影响：
@@ -230,7 +245,7 @@
   - 默认模式：stdout 展示下载任务的 ID、名称、类别、来源、状态与目标路径。
   - `--json`：stdout 输出成功信封 JSON。
 - **`--json` 的 `data`**：
-  - `download`（对象，后端返回的下载任务摘要，字段包括 `id`、`name`、`source`、`category`、`revision`、`path`、`sizeBytes`、`downloadedBytes`、`downloadSpeed`、`status`、`message`、`jobName`、`creatorId`、`referenceCount`、`createdAt`、`updatedAt`）
+  - `download`（对象，保留后端下载任务摘要，包括基础状态/进度、请求者与当前用户关系、操作权限，以及来源元数据字段）
 - **状态**: [x] Completed
 
 ### `crater download model <NAME>` / `crater download dataset <NAME>`
@@ -247,10 +262,18 @@
 - **位置参数**: 无；如果提供任何位置参数，返回 `usage_error`。
 - **选项**:
   - `--category` (string): 可选过滤类别，`model` 或 `dataset`。
+  - `--status` (string): 服务端按任务状态过滤：`Pending | Downloading | Paused | Ready | Failed`。
+  - `--search` (string): 服务端按下载任务名称搜索。
+  - `--page` (int, default `1`): 服务端页码，必须大于等于 `1`。
+  - `--page-size` (int, default `15`): 服务端每页数量，范围 `1..100`。
+  - `--all-pages` (bool): 从第一页顺序获取全部服务端分页。
+- **处理逻辑**:
+  - 调用 `/api/v1/model-download/models/downloads`，分页和筛选均由服务端执行。
+  - `--all-pages` 保留第一页响应中的状态汇总，并合并各页任务。
 - **输出格式**:
   - 默认模式：表格展示 `ID`、`NAME`、`CATEGORY`、`SOURCE`、`STATUS`、`PATH`。
   - `--json`：stdout 输出成功信封 JSON。
-- **`--json` 的 `data`**：`downloads`（下载任务数组）。
+- **`--json` 的 `data`**：`downloads`（当前页或完整下载任务数组）、`summary`（后端状态汇总）；非 `--all-pages` 时还包含 `pagination`。
 - **状态**: [x] Completed
 
 ### `crater download get <ID>`
@@ -327,10 +350,20 @@
 - **描述**: 查看指定节点上的 Pod。
 - **位置参数**:
   - `<name>` (positional, required): 节点名称。
+- **选项**:
+  - `--namespace` (string): 仅显示指定命名空间中的 Pod；未使用 `--all-namespaces` 时必填。
+  - `--all-namespaces` (bool): 显示所有命名空间；与 `--namespace` 互斥。
+  - `--status` (string): 按 Pod 阶段过滤：`Pending | Running | Succeeded | Failed | Unknown`。
+  - `--type` (string): 按控制器类型过滤：`batch.volcano.sh/v1alpha1/Job | aisystem.github.com/v1alpha1/AIJob`。
+  - `--search` (string): 按 Pod 名称子串过滤。
+  - `--page` (int, default `1`) / `--page-size` (int, default `15`, max `200`): 对过滤后的列表分页。
+  - `--all-pages` (bool): 不截断，返回全部过滤结果。
 - **处理逻辑**:
   - 调用 `/api/v1/nodes/{name}/pods`。
+  - 平台当前没有向普通用户暴露作业命名空间配置，因此 CLI 不猜测固定默认值；必须显式选择 `--namespace` 或 `--all-namespaces`。
+  - CLI 会从 owner reference 补齐缺失的控制器类型，先在本地执行命名空间、状态、类型和名称过滤，再按 Pod 名称、命名空间稳定排序并分页。
   - 默认模式以表格展示 Pod 名称、命名空间、IP、状态、类型和资源。
-- **`--json` 的 `data`**：`pods`（数组，平台节点 Pod 响应）。
+- **`--json` 的 `data`**：`pods`（当前页数组）和 `pagination`（`page`、`page_size`、过滤后的 `total`）；`--all-pages` 时省略 `pagination`。
 - **状态**: [x] Completed
 
 ### `crater node gpu <name>`
@@ -355,20 +388,25 @@
 - **选项**:
   - `--all` (bool): 调用 `/api/v1/vcjobs/all`，列出当前身份可见且位于 `--days` 回看窗口内的作业。
   - `--user` (string): 调用 `/api/v1/vcjobs/user/{username}`，列出指定用户且位于 `--days` 回看窗口内的作业。
-  - `--days` (int): 与 `--all` 或 `--user` 配合使用的回溯天数；`-1` 表示不按时间过滤。小于 `-1` 的值返回 `usage_error`。
-  - `--status` (string): 本地过滤作业状态。
-  - `--type` (string): 本地过滤作业类型：`jupyter | webide | custom | pytorch | tensorflow | kuberay | deepspeed | openmpi`。
-  - `--node` (string): 本地过滤运行在指定节点上的作业。
-  - `--owner` (string): 本地按用户名或显示名筛选。
+  - `--days` (int): 覆盖当前路由的回溯天数；`-1` 表示不按时间过滤。小于 `-1` 的值返回 `usage_error`。不指定时，默认自视图不限制时间，`--all`/管理员视图回看 7 天，`--user` 回看 30 天。
+  - `--search` (string): 服务端按作业名称、所有者或账户搜索，最多 128 个 Unicode 字符。
+  - `--status` (string): 服务端过滤作业状态。
+  - `--type` (string): 服务端过滤作业类型：`jupyter | webide | custom | pytorch | tensorflow | kuberay | deepspeed | openmpi`。
+  - `--node` (string): 服务端过滤运行在指定节点上的作业。
+  - `--owner` (string): 本地按用户名或作业响应中的 owner 精确筛选。
   - `--from` / `--to` (string): 本地按 `createdAt` 时间范围筛选，支持 RFC3339 或 `YYYY-MM-DD`。
-  - `--interactive` (bool): 本地过滤交互式作业（`jupyter` / `webide`）。
-  - `--batch` (bool): 本地过滤非交互式作业。
+  - `--interactive` (bool): 服务端只返回交互式作业（`jupyter` / `webide`）。
+  - `--batch` (bool): 服务端只返回非交互式作业。
+  - `--page` (int, default `1`) / `--page-size` (int, default `15`, max `200`): 请求指定服务端分页。
+  - `--sort` (string): 最多 3 个逗号分隔的服务端排序字段，字段前加 `-` 表示降序；支持 `name | jobName | owner | queue | jobType | scheduleType | status | billedPointsTotal | createdAt | startedAt | completedAt`，不允许重复字段。
+  - `--all-pages` (bool): 顺序请求全部服务端分页。
 - **处理逻辑**:
   - 默认调用 `/api/v1/vcjobs`，列出当前用户和当前账户下的作业。
-  - `--user` 优先于 `--all`；两者都不提供时不使用 `--days`。
+  - `--user` 优先于 `--all`；`--days` 可覆盖任一列表路由的默认回看窗口。
   - `--interactive` 与 `--batch` 互斥。
+  - 未使用 `--owner`、`--from`、`--to` 时保留服务端页和 `total`；使用任一本地筛选时，CLI 以每批最多 `200` 条读取全部服务端候选页，完成本地筛选后按用户请求的 `--page-size` 重新分页。
   - 默认模式以表格展示名称、平台作业名、类型、状态、队列、节点和资源。
-- **`--json` 的 `data`**：`jobs`（数组，元素与平台作业摘要响应一致，过滤后返回）。
+- **`--json` 的 `data`**：`jobs`（当前页数组）和 `pagination`。需要本地过滤时，CLI 先以较大批次取回候选项、完成过滤，再对过滤结果分页；只有 `--all-pages` 会返回完整过滤结果并省略 `pagination`。
 - **状态**: [x] Completed
 
 ### `crater job get|pods|events|yaml|template <name>`
@@ -380,17 +418,23 @@
   - `template`: 输出作业模板内容。
 - **位置参数**:
   - `<name>` (positional, required): 平台作业名，对应前端详情页路径中的作业名。
+- **`pods` 选项**:
+  - `--status` (string): 本地按 Pod 阶段过滤：`Pending | Running | Succeeded | Failed | Unknown`。
+  - `--search` (string): 本地按 Pod 名称子串过滤。
+  - `--page` (int, default `1`) / `--page-size` (int, default `15`, max `200`): 对筛选后的 Pod 分页。
+  - `--all-pages` (bool): 返回指定作业的全部筛选后 Pod。
 - **处理逻辑**:
   - `get` 调用 `/api/v1/vcjobs/{name}/detail`。
-  - `pods` 调用 `/api/v1/vcjobs/{name}/pods`。
+  - `pods` 调用 `/api/v1/vcjobs/{name}/pods`，按名称稳定排序后本地分页。
   - `events` 调用 `/api/v1/vcjobs/{name}/event`。
   - `yaml` 调用 `/api/v1/vcjobs/{name}/yaml`，默认模式直接输出 YAML 字符串到 stdout。
   - `template` 调用 `/api/v1/vcjobs/{name}/template`。
+  - 这些作业专用端点按平台作业名定位资源，不接受或伪造默认 namespace。`get` 的 `namespace`、`pods` 中每个 Pod 的 `namespace`，以及事件/YAML 中的 namespace 信息均保留后端真实值。
   - 缺少 `<name>` 时返回 `usage_error`。
-  - 默认模式以表格展示 Pod 名称、命名空间、节点、IP、阶段和资源。
+  - `get` 的人类可读详情显式展示后端返回的 namespace；`pods` 默认模式以表格展示 Pod 名称、命名空间、节点、IP、阶段和资源。
 - **`--json` 的 `data`**：
   - `get`: `job`
-  - `pods`: `pods`
+  - `pods`: `pods`；非 `--all-pages` 时还包含 `pagination`
   - `events`: `events`
   - `yaml`: `yaml`
   - `template`: `template`
@@ -468,8 +512,9 @@
 - **选项**:
   - `--user` (string): 列出指定用户作业。
   - `--days` (int): 回看天数；`-1` 表示全部，默认 `0`。
-  - `--status`、`--type`、`--node`、`--owner`、`--from`、`--to`、`--interactive`、`--batch`: 与 `crater job ls` 相同，均为本地筛选。
-- **`--json` 的 `data`**：`jobs`（数组）。
+  - `--search`、`--status`、`--type`、`--node`、`--owner`、`--from`、`--to`、`--interactive`、`--batch`、`--sort`: 与 `crater job ls` 相同；其中 `owner/from/to` 为本地筛选，其余支持的筛选和排序传给管理员列表 API。
+  - `--page` (int, default `1`) / `--page-size` (int, default `15`, max `200`) / `--all-pages`: 与 `crater job ls` 使用相同的服务端/本地混合分页语义。
+- **`--json` 的 `data`**：`jobs`（当前页数组）和 `pagination`；`--all-pages` 时省略 `pagination`。
 - **状态**: [x] Completed
 
 ### `crater admin job delete <name>`
@@ -515,25 +560,28 @@
 
 本模块提供容器镜像、镜像构建、分享、CUDA base image 和 Harbor 项目管理能力。所有命令均要求已有 active credentials。用户可操作资源使用 `crater image ...`；管理员/平台级资源统一使用 `crater admin image ...`，不得使用 `--admin` 切换。
 
-### `crater image ls`
-- **描述**: 列出当前账号可见的镜像。
+### `crater image ls` / `crater admin image ls`
+- **描述**:
+  - `crater image ls`: 列出当前账号可见的镜像。
+  - `crater admin image ls`: 列出管理员可见的全部镜像。
 - **位置参数**: 无；如果提供任何位置参数，返回 `usage_error`。
 - **选项**:
-  - `--available` (bool): 调用 `/api/v1/images/available`，列出创建作业时可选择的镜像。
-  - `--type` (string): 本地过滤镜像适用的作业类型。
+  - `--available` (bool, user only): 调用 `/api/v1/images/available`，列出创建作业时可选择的镜像。
+  - `--type` (string, user only): 本地过滤镜像适用的作业类型。
   - `--arch` (string): 本地过滤镜像架构，例如 `linux/amd64`。
-  - `--visibility` (string): 本地过滤镜像可见性，例如 `Public`、`Private`、`UserShare`、`AccountShare`。
+  - `--visibility` (string): 本地过滤镜像可见性：`Public | Private | UserShare | AccountShare`。
   - `--owner` (string): 按所有者用户名或昵称子串本地过滤。
   - `--search` (string): 按镜像地址或描述子串本地过滤。
+  - `--page` (int, default `1`) / `--page-size` (int, default `15`, max `200`) / `--all-pages`: 使用公共本地分页契约。
 - **处理逻辑**:
-  - 默认调用 `/api/v1/images/image`。
-  - 所有过滤均在 CLI 本地完成，不改变平台状态。
+  - 用户命令默认调用 `/api/v1/images/image`，`--available` 改用 `/api/v1/images/available`；管理员命令调用管理员镜像列表接口。
+  - 所有过滤均在 CLI 本地完成；过滤后保持接口返回顺序并分页，不改变平台状态。
   - 默认模式以表格展示 ID、镜像地址、类型、可见性、架构和所有者。
-- **`--json` 的 `data`**：`images`（数组，元素与平台镜像响应一致，过滤后返回）。
+- **`--json` 的 `data`**：`images`（当前页或完整数组）；非 `--all-pages` 时还包含 `pagination`。
 - **状态**: [x] Completed
 
 ### Image Build Commands
-- `crater image build ls`: `/api/v1/images/kaniko`
+- `crater image build ls [--page N] [--page-size N] [--all-pages]`: `/api/v1/images/kaniko`
 - `crater image build get <name>`: `/api/v1/images/getbyname?name=...`
 - `crater image build template <name>`: `/api/v1/images/template?name=...`
 - `crater image build pod <id>`: `/api/v1/images/podname?id=...`
@@ -542,9 +590,10 @@
 - `crater image build envd --name NAME --tag TAG (--envd TEXT | --file PATH) [--build-source EnvdAdvanced|EnvdRaw]`
 - `crater image build remove --ids 1,2`
 - Admin variants:
-  - `crater admin image build-ls`
+  - `crater admin image build-ls [--page N] [--page-size N] [--all-pages]`
   - `crater admin image build-remove --ids 1,2`
-- JSON payload keys: `builds`, `build`, `template`, `pod`, `message`.
+- 两个构建列表保持接口返回顺序后在本地分页；`page-size` 默认 `15`、最大 `200`。
+- JSON payload keys: `builds`（列表非 `--all-pages` 时同时有 `pagination`）、`build`、`template`、`pod`、`message`.
 
 ### Image Record Commands
 - `crater image upload --image IMAGE [--type jupyter|webide|custom|pytorch|tensorflow]`
@@ -556,7 +605,7 @@
 - `crater image arch <id> --archs linux/amd64,linux/arm64`
 - `crater image valid --links image-a,image-b`
 - Admin variants:
-  - `crater admin image ls`
+  - `crater admin image ls`（分页和筛选契约见上文）
   - `crater admin image delete-many --ids 1,2`
   - `crater admin image description <id> --description TEXT`
   - `crater admin image type <id> --type jupyter|webide|custom|pytorch|tensorflow`
@@ -617,18 +666,26 @@ This section records the read-only API surface covered by the CLI after the broa
 - JSON payload keys: `datasets`, `dataset`, `users`, `queues`, `templates`, `template`.
 
 ### Model Download Reads
-- `crater model-download ls [--category model|dataset]`: `/api/v1/model-download/models/downloads`.
+- `crater model-download ls [--category model|dataset] [--status STATUS] [--search TEXT] [--page N] [--page-size N] [--all-pages]`: `/api/v1/model-download/models/downloads`；这是 `download ls` 的兼容入口，复用相同的服务端分页、筛选和 JSON 契约，`page-size` 默认 `15`、最大 `100`。
 - `crater model-download get <id>`: `/api/v1/model-download/models/downloads/{id}`.
 - `crater model-download logs <id>`: `/api/v1/model-download/models/downloads/{id}/logs`.
-- `crater admin model-download ls`: `/api/v1/admin/model-download/models/downloads`.
-- JSON payload keys: `downloads`, `download`, `logs`.
+- `crater admin model-download ls [--category model|dataset] [--status STATUS] [--search TEXT] [--page N] [--page-size N] [--all-pages]`: `/api/v1/admin/model-download/models/downloads`；后端返回数组，CLI 完成本地筛选后分页，`page-size` 默认 `15`、最大 `100`。
+- 列表 JSON payload 包含 `downloads` 与当前页 `pagination`；普通列表还包含后端 `summary`。`--all-pages` 省略 `pagination`。其他 payload keys: `download`, `logs`.
 
 ### Context, Billing, User, And Approval Reads
 - `crater context prequeue|quota|resources|billing`: `/api/v1/context/...` summary reads used by the portal.
-- `crater billing status`, `summary`, `prices`, `jobs [--all|--user USER --days N]`, `job <name>`.
+- `crater billing status`, `summary`, `prices`, `job <name>`.
+- `crater billing jobs [--all | --user USER] [--days N] [--search TEXT] [--page N] [--page-size N] [--all-pages]` 与 `crater admin billing jobs [--user USER] ...`：
+  - `--days` 默认 `30` 且必须大于等于 `-1`；普通命令仅在 `--all` / `--user` 路由中传递 days，并保留 `--user` 优先于 `--all` 的语义；管理员命令始终传递 days。
+  - `--search` 大小写不敏感地匹配展示名或平台作业名；CLI 按平台作业名、展示名、计费点数稳定排序后本地分页。
+  - `page-size` 默认 `15`、最大 `200`；JSON 使用 `data.billing`，非 `--all-pages` 时同时有 `data.pagination`。
 - `crater user get <username>`, `email-verified`.
-- `crater order ls`, `get <id>`, `by-name <name>`.
-- `crater admin billing status|jobs`, `crater admin order ls|get <id>`, `crater admin user ls`, `crater admin user billing summary|accounts <username>`.
+- `crater order ls [--status STATUS] [--type TYPE] [--search TEXT] [--page N] [--page-size N] [--all-pages]`, `get <id>`, `by-name <name>`。
+- `crater admin order ls` 支持相同的本地筛选和分页，并额外支持 `--creator TEXT`。普通用户 `order ls` 不提供 creator filter；两者的 `--search` 均匹配工单名称或创建者信息。
+- 工单列表默认按 `Pending`、`Approved`、`Rejected`、`Canceled` 分组，同状态按创建时间和 ID 倒序排列。
+- `crater admin user ls [--base] [--search TEXT] [--role Guest|User|Admin] [--status Pending|Active|Inactive] [--page N] [--page-size N] [--all-pages]`；搜索覆盖用户名与显示名，默认按 ID 倒序。`--base` 与 `--role` / `--status` 互斥。
+- 上述工单和用户列表均先本地筛选再分页，`page-size` 默认 `15`、最大 `200`；JSON 当前页输出同时包含 `data.pagination`。
+- `crater admin billing status|jobs`, `crater admin order get <id>`, `crater admin user billing summary|accounts <username>`.
 
 ### Approval Order Writes
 - User-visible commands stay under `crater order ...`:
@@ -646,7 +703,12 @@ This section records the read-only API surface covered by the CLI after the broa
 - `--json` success payloads use `data.message`; `approve --lock --json` also includes `data.lock_message`.
 
 ### Pod And Non-Volcano Job Diagnostics
-- `crater pod containers|events|ingresses|nodeports <namespace> <pod>` and `crater pod logs <namespace> <pod> <container> [--tail N] [--timestamps] [--previous]` cover `/api/v1/namespaces/...` diagnostic GET APIs. Log streaming and terminal websocket APIs are intentionally not part of this read CLI.
+- 普通用户直接诊断 Job Pod 时必须显式指定真实命名空间：
+  - `crater pod containers|events|ingresses|nodeports <pod> --namespace NAMESPACE`
+  - `crater pod logs <pod> <container> --namespace NAMESPACE [--tail N] [--timestamps] [--previous]`
+- 为兼容旧脚本，仍接受显式 namespace 的旧位置参数形式：`... <namespace> <pod>` 与 `logs <namespace> <pod> <container>`。同一次调用不能同时提供旧位置参数 namespace 和 `--namespace`，否则返回 `usage_error`。
+- 上述命令覆盖 `/api/v1/namespaces/...` diagnostic GET APIs。平台未向普通用户暴露全局作业命名空间配置，CLI 不硬编码或猜测默认值；`crater job get|pods|events|yaml` 始终使用作业 API 返回的真实 namespace。
+- Log streaming and terminal websocket APIs are intentionally not part of this read CLI.
 - AIJob/SPJob reads are intentionally not exposed in this PR because their backend identifier contracts differ from Volcano job names and need a dedicated CLI design.
 
 ### Interfaces Not Exposed As General Read CLI

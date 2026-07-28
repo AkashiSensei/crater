@@ -61,6 +61,23 @@ crater auth logout --yes --no-interactive
 - 不要在非交互模式下期待密码输入、确认框或列表选择。
 - 不要为了让命令通过而自动追加 `--yes`；必须先确认用户意图。
 
+## 列表分页
+
+采用公共分页契约的列表会在该命令帮助中提供：
+
+```bash
+crater job ls --page 1 --page-size 15 --json
+crater job ls --all-pages --json
+```
+
+规则：
+
+- `--page` 默认 `1`；`--page-size` 默认 `15`。公共最大值通常为 `200`，`download ls` 及兼容的 `model-download ls`/管理员列表最大为 `100`；以当前命令 `--help` 为准。
+- 普通分页 JSON 在资源数组旁返回 `data.pagination.page`、`page_size`、`total`。使用 `total` 与当前页边界判断是否需要请求下一页。
+- `--all-pages` 从第一页返回全部筛选结果，并省略 `data.pagination`。服务端分页命令在未显式指定 `--page-size` 时使用端点最大批量，显式合法值仍优先。不要仅为“保险”默认使用它；数据量较大时优先逐页处理。
+- 某些命令由服务端分页，某些命令在取得 typed 数组后本地筛选和分页，但对调用方使用相同的 JSON 契约。
+- 非法分页参数会和状态、类型等其它本地可发现的问题聚合为一次 `usage_error`；两条及以上问题可从 `context.issues` 逐项修正。
+
 ## 错误输出
 
 失败输出会被写到 stderr：

@@ -268,9 +268,9 @@ crater download ls --no-interactive --json --category model
 {
   "category": "api_error",
   "code": "ERR_NETWORK_FAILURE",
-  "message": "could not reach server: Get \"https://example.invalid/api/v1/model-download/models/downloads?category=model\": context deadline exceeded",
+  "message": "could not reach server: Get \"https://example.invalid/api/v1/model-download/models/downloads?category=model\u0026page=1\u0026pageSize=15\": context deadline exceeded",
   "context": {
-    "msg": "network error: Get \"https://example.invalid/api/v1/model-download/models/downloads?category=model\": context deadline exceeded"
+    "msg": "network error: Get \"https://example.invalid/api/v1/model-download/models/downloads?category=model\u0026page=1\u0026pageSize=15\": context deadline exceeded"
   }
 }
 -- en/26-ls-invalid-category-nojson/argv --
@@ -493,5 +493,40 @@ crater download rm 123 --no-interactive --json --yes
   "message": "could not reach server: Delete \"https://example.invalid/api/v1/model-download/models/downloads/123\": context deadline exceeded",
   "context": {
     "msg": "network error: Delete \"https://example.invalid/api/v1/model-download/models/downloads/123\": context deadline exceeded"
+  }
+}
+-- en/47-ls-multiple-list-issues-json/argv --
+crater download ls --page 0 --page-size 101 --category bad --status Unknown --no-interactive --json
+-- en/47-ls-multiple-list-issues-json/exit --
+2
+-- en/47-ls-multiple-list-issues-json/stdout --
+-- en/47-ls-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1\npage-size must be between 1 and 100\ninvalid download category: bad\ninvalid download status: Unknown",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "page must be at least 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "page-size must be between 1 and 100"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "category",
+        "message": "invalid download category: bad"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "invalid download status: Unknown"
+      }
+    ]
   }
 }

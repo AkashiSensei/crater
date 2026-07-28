@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -27,6 +29,7 @@ type Client struct {
 //
 // - CRATER_TEST_SANDBOX_HTTP=timeout     => timeout
 // - CRATER_TEST_SANDBOX_HTTP=error404    => 404
+// - CRATER_TEST_SANDBOX_HTTP=passthrough => loopback snapshot fixture
 func applyHTTPSim(rc *req.Client) {
 	mode := testenv.SandboxHTTPMode()
 	switch mode {
@@ -34,8 +37,26 @@ func applyHTTPSim(rc *req.Client) {
 		wrapSim404(rc)
 	case "timeout", "hang":
 		wrapSimTimeout(rc)
+	case "passthrough":
+		wrapLoopbackPassthrough(rc)
 	default:
 	}
+}
+
+func wrapLoopbackPassthrough(rc *req.Client) {
+	rc.GetTransport().WrapRoundTripFunc(func(next http.RoundTripper) req.HttpRoundTripFunc {
+		return func(r *http.Request) (*http.Response, error) {
+			host := r.URL.Hostname()
+			ip := net.ParseIP(host)
+			if !strings.EqualFold(host, "localhost") && (ip == nil || !ip.IsLoopback()) {
+				return nil, fmt.Errorf(
+					"test sandbox passthrough rejected non-loopback host %q",
+					host,
+				)
+			}
+			return next.RoundTrip(r)
+		}
+	})
 }
 
 func wrapSim404(rc *req.Client) {

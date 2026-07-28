@@ -11,7 +11,8 @@
 ```bash
 crater download ls
 crater download ls --category model
-crater download ls --json
+crater download ls --status Downloading --search qwen --page 1 --page-size 15 --json
+crater download ls --all-pages --json
 ```
 
 查看单个任务：
@@ -44,7 +45,7 @@ crater download rm 123 --yes --no-interactive
 
 ## 命令说明
 
-- `download ls`：列出当前用户可见的下载任务，可用 `--category model|dataset` 过滤。
+- `download ls`：列出当前用户可见的下载任务。支持服务端 `--category model|dataset`、`--status Pending|Downloading|Paused|Ready|Failed`、`--search TEXT` 筛选，以及 `--page` / `--page-size` / `--all-pages` 分页。
 - `download get <ID>`：查看任务详情。
 - `download logs <ID>`：获取当前日志文本。
 - `download logs <ID> --follow`：持续轮询日志，直到任务进入 `Ready`、`Failed` 或 `Paused`。
@@ -56,6 +57,7 @@ crater download rm 123 --yes --no-interactive
 ## 判断规则
 
 - 需要脚本消费状态时使用 `--json`。
+- 列表默认 `page=1`、`page-size=15`，最大 `page-size=100`。普通分页读取 `data.pagination`；只有明确需要全部任务时使用 `--all-pages`。
 - `logs --follow` 是长时间运行的人类观察命令，不要与 `--json` 组合。
 - 删除任务前确认用户意图；非交互删除必须加 `--yes`。
 - `retry` 只适用于失败任务；其它状态由后端拒绝。
@@ -69,10 +71,18 @@ crater download rm 123 --yes --no-interactive
 {
   "status": "OK",
   "data": {
-    "downloads": []
+    "downloads": [],
+    "pagination": {
+      "page": 1,
+      "page_size": 15,
+      "total": 0
+    },
+    "summary": {}
   }
 }
 ```
+
+`--all-pages` 返回完整 `downloads` 并省略 `pagination`，仍保留后端 `summary`。分页、category 与 status 的本地可判定错误会聚合；若 stderr JSON 有 `context.issues`，一次修正其中全部字段。
 
 `download get/pause/resume/retry --json`：
 

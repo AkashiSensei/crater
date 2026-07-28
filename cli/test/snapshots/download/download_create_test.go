@@ -93,6 +93,7 @@ func TestDownloadCreateSnapshotsEN(t *testing.T) {
 		{ID: "44-token-env-missing-json", Args: []string{"download", "model", "qwen/Qwen2.5-Coder-7B-Instruct", "--no-interactive", "--json", "--source", "hf", "--token-env", "HF_TOKEN_NOT_SET"}},
 		{ID: "45-token-stdin-empty-json", Args: []string{"download", "model", "qwen/Qwen2.5-Coder-7B-Instruct", "--no-interactive", "--json", "--source", "hf", "--token-stdin"}},
 		{ID: "46-rm-timeout-json", Args: []string{"download", "rm", "123", "--no-interactive", "--json", "--yes"}},
+		{ID: "47-ls-multiple-list-issues-json", Args: []string{"download", "ls", "--page", "0", "--page-size", "101", "--category", "bad", "--status", "Unknown", "--no-interactive", "--json"}},
 	}
 
 	results := runDownloadCases(t, bin, baseEnv, cases)
@@ -155,6 +156,7 @@ func TestDownloadCreateSnapshotsZhCN(t *testing.T) {
 		{ID: "44-token-env-missing-json", Args: []string{"download", "model", "qwen/Qwen2.5-Coder-7B-Instruct", "--no-interactive", "--json", "--source", "hf", "--token-env", "HF_TOKEN_NOT_SET"}},
 		{ID: "45-token-stdin-empty-json", Args: []string{"download", "model", "qwen/Qwen2.5-Coder-7B-Instruct", "--no-interactive", "--json", "--source", "hf", "--token-stdin"}},
 		{ID: "46-rm-timeout-json", Args: []string{"download", "rm", "123", "--no-interactive", "--json", "--yes"}},
+		{ID: "47-ls-multiple-list-issues-json", Args: []string{"download", "ls", "--page", "0", "--page-size", "101", "--category", "bad", "--status", "Unknown", "--no-interactive", "--json"}},
 	}
 
 	results := runDownloadCases(t, bin, baseEnv, cases)

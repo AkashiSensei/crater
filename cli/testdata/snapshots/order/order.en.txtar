@@ -200,3 +200,38 @@ crater admin order check --yes --json --no-interactive
     "msg": "simulated"
   }
 }
+-- en/15-admin-ls-multiple-list-issues-json/argv --
+crater admin order ls --page 0 --page-size 201 --status Unknown --type model --json --no-interactive
+-- en/15-admin-ls-multiple-list-issues-json/exit --
+2
+-- en/15-admin-ls-multiple-list-issues-json/stdout --
+-- en/15-admin-ls-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "page must be at least 1\npage-size must be between 1 and 200\ninvalid approval order status: Unknown\ninvalid approval order type: model",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "page must be at least 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "page-size must be between 1 and 200"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "invalid approval order status: Unknown"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "type",
+        "message": "invalid approval order type: model"
+      }
+    ]
+  }
+}

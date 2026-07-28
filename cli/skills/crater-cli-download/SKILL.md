@@ -1,6 +1,6 @@
 ---
 name: crater-cli-download
-version: 1.0.0
+version: 1.1.0
 description: "Crater CLI 下载域：指导 AI Agent 通过 crater download 创建、等待、查看、暂停、恢复、重试、删除模型和数据集下载任务，并安全处理 Hugging Face / ModelScope token。用户提到 crater download、模型下载、数据集下载、ModelScope、Hugging Face、hf、ms、下载日志、暂停/恢复/重试下载时使用。"
 metadata:
   requires:
@@ -50,7 +50,8 @@ crater download dataset AI-ModelScope/alpaca-gpt4-data-zh --source ms
 crater download create --name qwen/Qwen2.5-Coder-7B-Instruct --category model --source hf --json
 crater download model meta-llama/Llama-2-7b-hf --source hf --token-env HF_TOKEN
 crater download model qwen/Qwen2.5-Coder-7B-Instruct --source hf --wait
-crater download ls --json
+crater download ls --status Downloading --search qwen --page-size 15 --json
+crater download ls --category model --all-pages --json
 crater download get 123 --json
 crater download logs 123
 crater download logs 123 --follow
@@ -62,6 +63,7 @@ crater download rm 123 --yes --no-interactive
 1. 先用 `crater auth ls --json` 确认存在 active credentials；下载命令需要登录。
 2. 参数错误时检查 `--name` 是否为 `owner/name`，`--category` 是否为 `model|dataset`，`--source` 是否为 `modelscope|ms|huggingface|hf`。
 3. 私有或 gated 仓库失败时，建议用户在本机设置环境变量并使用 `--token-env`。
-4. 任务创建后优先用 `crater download get <id> --json` 查看状态；需要查看所有任务时用 `crater download ls --json`。
+4. 任务创建后优先用 `crater download get <id> --json` 查看状态；列表默认每页 `15` 条、最大 `100` 条，并返回 `data.pagination` 与 `data.summary`。优先按页查询；只有明确需要全部任务时才使用 `download ls --all-pages --json`。
 5. 下载卡住时先看 `crater download logs <id>`；需要持续观察时使用 `--follow`，不要和 `--json` 组合。
 6. 如果需要创建后等待终态，用 `--wait`；脚本场景可组合 `--wait --json`，最终从 `data.download.status` 判断结果。
+7. `download ls` 的分页、category、status、search 均由服务端处理；分页与筛选值错误会聚合为一次 `usage_error`，有 `context.issues` 时一次修正全部字段。

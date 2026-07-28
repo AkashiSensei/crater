@@ -57,26 +57,47 @@ CLI 与 Crater 平台之间的请求、响应解析与传输层异常，集中�
 
 ### 传输层模拟（`CRATER_TEST_SANDBOX_HTTP`）
 
-**目的**：不经由真实网络时快速走通 CLI 的错误分支。**不**替代 OpenAPI 契约或联调。
+**目的**：在不连接外部真实网络的前提下，快速走通 CLI 的错误分支，或让成功快照访问由当前测试进程管理的 loopback fixture。**不**替代 OpenAPI 契约或联调。
 
-**实现要点**：`NewClient` 创建 req 客户端后调用 `applyHTTPSim`：读取 `CRATER_TEST_SANDBOX_HTTP`，按取值在 Transport 上 `WrapRoundTripFunc`，对**所有**经该客户端发出的请求返回同一种伪造结果（与 path 无关）。
+**实现要点**：`NewClient` 创建 req 客户端后调用 `applyHTTPSim`，读取 `CRATER_TEST_SANDBOX_HTTP` 并按取值在 Transport 上 `WrapRoundTripFunc`。`error404` 和 `timeout` 对**所有**经该客户端发出的请求返回同一种伪造结果（与 path 无关）；`passthrough` 则保留真实 RoundTripper，但在连接前拒绝非 loopback host。
 
 | 取值 | 行为 |
 |------|------|
 | （未设置） | 正常发起真实 HTTP。 |
 | `error404` / `404` | 返回 HTTP 404 + 固定 JSON body。 |
 | `timeout` / `hang` | RoundTrip 直接返回超时类错误（不睡眠）。 |
+| `passthrough` | 仅允许请求 `localhost` 或 loopback IP，将请求交给下一层 RoundTripper；非 loopback host 在传输前失败。 |
+
+成功快照的调用链如下：
+
+1. 快照测试进程使用 `httptest.Server` 启动仅服务固定响应的 loopback fixture，并负责其完整生命周期。
+2. harness 设置 `CRATER_TEST_SANDBOX_HTTP=passthrough`，并通过 `CRATER_TEST_SANDBOX_PLATFORM_URL` 把 Server URL 传给 CLI 子进程的沙箱 session。
+3. `internal/session.fakePlatformURL` 只接受 `http` / `https` 且 host 为 `localhost` 或 loopback IP 的 URL；`internal/api.wrapLoopbackPassthrough` 在实际请求时再次校验目标 host。
+4. CLI 子进程请求 fixture，测试收集输出后关闭 Server。
+
+该模式禁止访问外部网络、真实 Crater 平台以及测试启动前已存在的有状态本地服务。fixture 的响应必须由测试代码固定且不依赖机器外部状态；运行快照的环境必须支持测试进程 loopback bind 和 CLI 子进程 loopback connect。
+
+## 列表分页
+
+列表分页由 `internal/api` 的传输模型与 `cmd` 的公共展示 helper 两层协作：
+
+- `internal/api/pagination.go` 定义 typed `ListOptions`、`Page[T]`、默认页大小 `15` 与 `FetchAllPages`。支持分页的域客户端负责把这些选项转换成端点真实 query（例如 Job 使用 `page_size`，download 使用 `pageSize`），命令层不手写分页 URL。
+- `cmd/list_options.go` 统一挂载 `--page` / `--page-size` / `--all-pages`、收集分页用法问题、本地切页、构造 `data.pagination` 与打印表格页摘要。服务端分页命令使用 `--all-pages` 且用户未显式指定 `--page-size` 时，公共解析器采用对应端点最大批量；显式值保持不变。领域命令先把分页问题和自己的筛选问题合并，再一次返回 `errUsageFromIssues`。
+- Job 与 download 列表使用服务端分页。Job 还支持 owner / 时间范围等本地筛选：存在这些筛选时，命令先以服务端允许的批次顺序拉取全部候选页，再筛选并按用户请求的页大小重新切页；无本地筛选时保留后端返回的页码和总数。
+- Node Pod、Job Pod、审批工单、管理员用户、镜像/构建记录和计费作业等数组端点使用本地分页：typed 响应先经过命令约定的过滤与稳定排序，再调用公共 helper。`--all-pages` 绕过本地截断；JSON 完整结果省略 `pagination`。
+
+这样，服务端和本地列表向用户暴露相同的 JSON / 表格契约，但 `total` 始终描述最终筛选结果，而不是某个中间候选页。
 
 ## 测试沙箱（Sandbox）
 
 CLI 的快照测试与可复现测试通过环境变量实现“网络与存储”两类外部副作用隔离：
 
-- **网络隔离**：`CRATER_TEST_SANDBOX_HTTP` 由 `internal/api/client.go` 的 `applyHTTPSim` 实现，对经 `NewClient` 创建的客户端统一模拟传输层失败（如超时、404）。
+- **网络隔离**：`CRATER_TEST_SANDBOX_HTTP` 由 `internal/api/client.go` 的 `applyHTTPSim` 实现；通常统一模拟传输层失败（如超时、404），成功快照可按上节契约仅放行测试管理的 loopback fixture。
 - **存储隔离**：`CRATER_TEST_SANDBOX=1` 由 `internal/session` 实现。开启后，`session` 返回稳定的 fake session（多账号上下文 + fake token），并使写入操作 no-op，从而避免触达开发者真实 `state.json` 与 OS keyring。
 
 该机制的目的有二：
 
-- 避免测试过程中修改或影响开发者外部环境（配置、凭据、真实网络）。
+- 避免测试过程中修改或影响开发者外部环境（配置、凭据、外部网络与真实平台）。
 - 避免测试结果依赖外部环境（登录态、网络波动、残留文件），保证稳定可复现。
 
 **边界**：沙箱不是完整的进程隔离。语言/区域相关变量（如 `CRATER_LANG`、`LANG/LC_ALL`）仍会影响输出，快照 harness 需要显式固定它们。
@@ -111,6 +132,7 @@ CLI 的快照测试与可复现测试通过环境变量实现“网络与存储�
 
 - 测试进程先构建 `crater` 可执行文件（由 `internal/snaptest` 内部一次性完成），再以子进程方式运行各用例。
 - 运行环境由快照 harness 统一设置：隔离 HOME、固定 `CRATER_LANG` 与 `LANG/LC_ALL`、关闭交互（用例通常显式传 `--no-interactive`），并默认开启存储沙箱 `CRATER_TEST_SANDBOX=1`，以确保不同机器输出一致。
+- `snapshot-check`、`snapshot-update`、`test` 与 `pre-commit-check` 都会通过 `cli/test/snapshots/**` 自动执行快照用例；包含成功 fixture 的用例会在测试进程内启动并关闭 loopback Server，因此这些目标的运行环境必须允许 loopback bind/connect。
 
 ### 多语言支持
 

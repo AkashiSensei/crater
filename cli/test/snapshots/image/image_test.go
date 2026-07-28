@@ -66,6 +66,8 @@ func runImageSnapshots(t *testing.T, lang string) {
 		{ID: "25-image-help", Args: []string{"image", "--help"}},
 		{ID: "26-image-upload-help", Args: []string{"image", "upload", "--help"}},
 		{ID: "27-image-build-pip-apt-help", Args: []string{"image", "build", "pip-apt", "--help"}},
+		{ID: "28-image-ls-multiple-list-issues-json", Args: []string{"image", "ls", "--page", "0", "--page-size", "201", "--type", "bad", "--visibility", "bad", "--json", "--no-interactive"}},
+		{ID: "29-image-build-ls-invalid-page-json", Args: []string{"image", "build", "ls", "--page", "0", "--json", "--no-interactive"}},
 	}
 	results := make([]*snaptest.Result, len(cases))
 	for i := range cases {

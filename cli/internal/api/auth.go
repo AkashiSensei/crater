@@ -37,13 +37,19 @@ type AccountContext struct {
 
 // UserAttribute 用户属性
 type UserAttribute struct {
-	ID       int     `json:"id"`
-	Name     string  `json:"name"`
-	Nickname string  `json:"nickname"`
-	Email    *string `json:"email"`
-	Phone    *string `json:"phone"`
-	Teacher  *string `json:"teacher"`
-	Group    *string `json:"group"`
+	ID       uint   `json:"id,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Nickname string `json:"nickname,omitempty"`
+
+	Email     *string `json:"email,omitempty"`
+	Teacher   *string `json:"teacher,omitempty"`
+	Group     *string `json:"group,omitempty"`
+	ExpiredAt *string `json:"expiredAt,omitempty"`
+
+	Phone  *string `json:"phone,omitempty"`
+	Avatar *string `json:"avatar,omitempty"`
+	UID    *string `json:"uid,omitempty"`
+	GID    *string `json:"gid,omitempty"`
 }
 
 // Login 用户登录（真实 HTTP）

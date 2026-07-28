@@ -7,7 +7,7 @@ import (
 
 func TestListOptionsNormalize(t *testing.T) {
 	options := (ListOptions{}).Normalize()
-	if options.Page != 1 || options.PageSize != 50 {
+	if options.Page != 1 || options.PageSize != DefaultCLIPageSize {
 		t.Fatalf("unexpected defaults: %#v", options)
 	}
 }

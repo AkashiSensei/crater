@@ -2,7 +2,10 @@ package session
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/raids-lab/crater/cli/internal/state"
 	"github.com/raids-lab/crater/cli/internal/testenv"
@@ -19,10 +22,12 @@ func fakeAuthState() state.State {
 		return state.State{Language: fakeLanguage()}
 	}
 
+	platformURL := fakePlatformURL()
+
 	// Deterministic fake data for snapshot/testing.
 	infos := []state.AuthInfo{
 		{
-			PlatformURL: "https://example.invalid",
+			PlatformURL: platformURL,
 			Username:    "alice",
 			Method:      "normal",
 			UserID:      1001,
@@ -30,7 +35,7 @@ func fakeAuthState() state.State {
 			Role:        "admin",
 		},
 		{
-			PlatformURL: "https://example.invalid",
+			PlatformURL: platformURL,
 			Username:    "bob",
 			Method:      "ldap",
 			UserID:      1002,
@@ -58,6 +63,27 @@ func fakeAuthState() state.State {
 		ActiveContext: ac,
 		Language:      fakeLanguage(),
 	}
+}
+
+func fakePlatformURL() string {
+	const fallback = "https://example.invalid"
+	raw := strings.TrimRight(
+		strings.TrimSpace(os.Getenv("CRATER_TEST_SANDBOX_PLATFORM_URL")),
+		"/",
+	)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fallback
+	}
+	host := parsed.Hostname()
+	ip := net.ParseIP(host)
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return fallback
+	}
+	return raw
 }
 
 func fakeLanguage() string {

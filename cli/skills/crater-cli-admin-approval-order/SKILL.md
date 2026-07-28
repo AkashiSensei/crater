@@ -1,8 +1,10 @@
 ---
 name: crater-cli-admin-approval-order
 description: "Crater CLI 管理员审批工单域：通过 crater admin order ... 查看、批准、拒绝、清理审批工单。仅在用户明确要求管理员审核时使用。"
-version: 0.1.0
+version: 0.2.0
 metadata:
+  requires:
+    bins: ["crater"]
   cliHelp: "crater admin order --help"
 ---
 
@@ -10,9 +12,11 @@ metadata:
 
 Use this skill only for administrator approval-order workflows.
 
+**CRITICAL — Before doing anything else, MUST read `crater-cli-shared` (possible path: [`../crater-cli-shared/SKILL.md`](../crater-cli-shared/SKILL.md)) for pagination, JSON, non-interactive use, errors, confirmation, and secret handling.**
+
 ## Commands
 
-- `crater admin order ls --json`
+- `crater admin order ls [--status Pending|Approved|Rejected|Canceled] [--type job|dataset] [--creator TEXT] [--search TEXT] [--page N] [--page-size N] [--all-pages] --json`
 - `crater admin order get <id> --json`
 - `crater admin order approve <id> --json`
 - `crater admin order approve <id> --lock --days <n> --hours <n> --minutes <n> --json`
@@ -28,6 +32,9 @@ Use this skill only for administrator approval-order workflows.
 - Lock duration values must be non-negative. Unless `--permanent` is set, `--lock` requires a positive duration.
 - The CLI does not send `reviewerID`; the backend derives the reviewer from the active token.
 - The review API only updates status and review notes. It does not overwrite the original order content.
+- Lists are filtered and then locally paginated. They are sorted with pending orders first and newest orders first within each status, default to 15 records (maximum 200), and expose `data.pagination`.
+- `--creator` is admin-only and matches creator username or display name. `--search` also matches the order name and creator information.
+- Pagination, status, and type validation are aggregated. If stderr JSON contains `context.issues`, fix all fields before retrying.
 
 ## Safety
 

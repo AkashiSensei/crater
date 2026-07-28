@@ -49,7 +49,7 @@ crater job ls --no-interactive --days -2
 -- zh-CN/05-ls-invalid-days-nojson/stdout --
 -- zh-CN/05-ls-invalid-days-nojson/stderr --
 Error:
-  days 必须大于等于 -1
+  回溯天数必须大于等于 -1
 -- zh-CN/06-ls-invalid-status-json/argv --
 crater job ls --no-interactive --json --status bad
 -- zh-CN/06-ls-invalid-status-json/exit --
@@ -160,9 +160,9 @@ crater job ls --no-interactive --json
 {
   "category": "api_error",
   "code": "ERR_NETWORK_FAILURE",
-  "message": "无法连接服务器：Get \"https://example.invalid/api/v1/vcjobs\": context deadline exceeded",
+  "message": "无法连接服务器：Get \"https://example.invalid/api/v1/vcjobs?page=1\u0026page_size=15\": context deadline exceeded",
   "context": {
-    "msg": "network error: Get \"https://example.invalid/api/v1/vcjobs\": context deadline exceeded"
+    "msg": "network error: Get \"https://example.invalid/api/v1/vcjobs?page=1\u0026page_size=15\": context deadline exceeded"
   }
 }
 -- zh-CN/13-delete-confirm-required-json/argv --
@@ -212,3 +212,162 @@ crater admin job clean low-gpu --time-range 90 --wait-time 30 --no-interactive -
   "code": "ERR_MISSING_REQUIRED_FLAG",
   "message": "非交互模式下必须提供 --yes"
 }
+-- zh-CN/16-ls-multiple-list-issues-json/argv --
+crater job ls --page 0 --page-size 201 --status bad --json --no-interactive
+-- zh-CN/16-ls-multiple-list-issues-json/exit --
+2
+-- zh-CN/16-ls-multiple-list-issues-json/stdout --
+-- zh-CN/16-ls-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1\n每页数量必须在 1 到 200 之间\n无效的作业状态：bad",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "页码必须至少为 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page-size",
+        "message": "每页数量必须在 1 到 200 之间"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "无效的作业状态：bad"
+      }
+    ]
+  }
+}
+-- zh-CN/17-pods-multiple-list-issues-json/argv --
+crater job pods job-123 --page 0 --status bad --json --no-interactive
+-- zh-CN/17-pods-multiple-list-issues-json/exit --
+2
+-- zh-CN/17-pods-multiple-list-issues-json/stdout --
+-- zh-CN/17-pods-multiple-list-issues-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "页码必须至少为 1\n无效的 Pod 状态：bad",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "page",
+        "message": "页码必须至少为 1"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "status",
+        "message": "无效的 Pod 状态：bad"
+      }
+    ]
+  }
+}
+-- zh-CN/18-ls-search-page-timeout-json/argv --
+crater job ls --search trainer --page 2 --page-size 15 --sort=-createdAt --json --no-interactive
+-- zh-CN/18-ls-search-page-timeout-json/exit --
+4
+-- zh-CN/18-ls-search-page-timeout-json/stdout --
+-- zh-CN/18-ls-search-page-timeout-json/stderr --
+{
+  "category": "api_error",
+  "code": "ERR_NETWORK_FAILURE",
+  "message": "无法连接服务器：Get \"https://example.invalid/api/v1/vcjobs?page=2\u0026page_size=15\u0026search=trainer\u0026sort=-createdAt\": context deadline exceeded",
+  "context": {
+    "msg": "network error: Get \"https://example.invalid/api/v1/vcjobs?page=2\u0026page_size=15\u0026search=trainer\u0026sort=-createdAt\": context deadline exceeded"
+  }
+}
+-- zh-CN/19-ls-search-sort-usage-json/argv --
+crater job ls --search 这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词 --sort name,-name,bad,createdAt --json --no-interactive
+-- zh-CN/19-ls-search-sort-usage-json/exit --
+2
+-- zh-CN/19-ls-search-sort-usage-json/stdout --
+-- zh-CN/19-ls-search-sort-usage-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "搜索内容最多允许 128 个字符\n排序字段最多允许 3 个\n排序字段 \"name\" 重复\n不支持的排序字段 \"bad\"",
+  "context": {
+    "issues": [
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "search",
+        "message": "搜索内容最多允许 128 个字符"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "sort",
+        "message": "排序字段最多允许 3 个"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "sort",
+        "message": "排序字段 \"name\" 重复"
+      },
+      {
+        "code": "ERR_INVALID_FLAG_VALUE",
+        "field": "sort",
+        "message": "不支持的排序字段 \"bad\""
+      }
+    ]
+  }
+}
+-- zh-CN/20-ls-page-success-nojson/argv --
+crater job ls --page 2 --page-size 2 --no-interactive
+-- zh-CN/20-ls-page-success-nojson/exit --
+0
+-- zh-CN/20-ls-page-success-nojson/stdout --
+名称                     平台作业名                         类型         状态           队列               节点                   资源
+training-demo            vcjob-alice-training-demo          pytorch      Running        default            gpu-02                 cpu=4,memory=16Gi,nvidia.com/a100=2
+第 2 页，共 3 条
+-- zh-CN/20-ls-page-success-nojson/stderr --
+-- zh-CN/21-ls-page-success-json/argv --
+crater job ls --page 2 --page-size 2 --json --no-interactive
+-- zh-CN/21-ls-page-success-json/exit --
+0
+-- zh-CN/21-ls-page-success-json/stdout --
+{
+  "data": {
+    "jobs": [
+      {
+        "name": "training-demo",
+        "jobName": "vcjob-alice-training-demo",
+        "owner": "alice",
+        "userInfo": {
+          "username": "alice",
+          "nickname": "Alice"
+        },
+        "jobType": "pytorch",
+        "scheduleType": 0,
+        "queue": "default",
+        "status": "Running",
+        "createdAt": "2026-07-25T08:00:00Z",
+        "startedAt": "2026-07-25T08:01:00Z",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "nodes": [
+          "gpu-02"
+        ],
+        "resources": {
+          "cpu": "4",
+          "memory": "16Gi",
+          "nvidia.com/a100": "2"
+        },
+        "locked": false,
+        "permanentLocked": false,
+        "lockedTimestamp": "0001-01-01T00:00:00Z",
+        "billedPointsTotal": 12.5
+      }
+    ],
+    "pagination": {
+      "page": 2,
+      "page_size": 2,
+      "total": 3
+    }
+  },
+  "status": "OK"
+}
+-- zh-CN/21-ls-page-success-json/stderr --

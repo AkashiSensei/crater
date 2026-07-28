@@ -7,9 +7,11 @@ import (
 	"io"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/raids-lab/crater/cli/internal/api"
@@ -26,6 +28,7 @@ const (
 	scheduleNormal    = 1
 	volumeTypeFile    = 1
 	volumeTypeDataset = 2
+	jobMaxSearchRunes = 128
 )
 
 var (
@@ -36,6 +39,10 @@ var (
 	}
 	jobTypes = []string{
 		"jupyter", "webide", "custom", "pytorch", "tensorflow", "kuberay", "deepspeed", "openmpi",
+	}
+	jobListSortFields = []string{
+		"name", "jobName", "owner", "queue", "jobType", "scheduleType",
+		"status", "billedPointsTotal", "createdAt", "startedAt", "completedAt",
 	}
 )
 
@@ -100,27 +107,29 @@ func runAdminJobLs(cmd *cobra.Command, _ []string) error {
 }
 
 func readJobListOptions(cmd *cobra.Command, admin bool) (api.JobListOptions, error) {
-	listOptions, err := readJobPaginationOptions(cmd)
-	if err != nil {
-		return api.JobListOptions{}, err
-	}
+	listOptions, issues := listPaginationOptions(cmd, maxCLIPageSize)
+	sortFields, _ := cmd.Flags().GetString("sort")
+	listOptions.Sort = strings.TrimSpace(sortFields)
 	all, _ := cmd.Flags().GetBool("all")
 	username, _ := cmd.Flags().GetString("user")
 	username = strings.TrimSpace(username)
+	search, _ := cmd.Flags().GetString("search")
 	days, _ := cmd.Flags().GetInt("days")
 	status, _ := cmd.Flags().GetString("status")
 	jobType, _ := cmd.Flags().GetString("type")
 	node, _ := cmd.Flags().GetString("node")
 	interactive, _ := cmd.Flags().GetBool("interactive")
 	batch, _ := cmd.Flags().GetBool("batch")
-	if err := validateJobListFilters(cmd); err != nil {
-		return api.JobListOptions{}, err
+	issues = append(issues, jobListFilterIssues(cmd)...)
+	if len(issues) > 0 {
+		return api.JobListOptions{}, errUsageFromIssues(issues)
 	}
 	return api.JobListOptions{
 		ListOptions: listOptions,
 		All:         all,
 		Admin:       admin,
 		Username:    username,
+		Search:      strings.TrimSpace(search),
 		Days:        days,
 		Status:      strings.TrimSpace(status),
 		JobType:     strings.TrimSpace(jobType),
@@ -135,11 +144,13 @@ func listJobs(cmd *cobra.Command, opts api.JobListOptions) error {
 	if err != nil {
 		return err
 	}
-	fetchAll := opts.AllPages || hasLocalJobFilters(cmd)
+	localFilters := hasLocalJobFilters(cmd)
+	fetchAll := opts.AllPages || localFilters
 	var jobs api.Page[api.JobInfo]
 	var items []api.JobInfo
 	if fetchAll {
-		items, err = api.FetchAllPages(opts.ListOptions, func(listOptions api.ListOptions) (api.Page[api.JobInfo], error) {
+		fetchOptions := jobFetchListOptions(opts, localFilters)
+		items, err = api.FetchAllPages(fetchOptions, func(listOptions api.ListOptions) (api.Page[api.JobInfo], error) {
 			next := opts
 			next.ListOptions = listOptions
 			return client.ListJobs(next)
@@ -158,26 +169,46 @@ func listJobs(cmd *cobra.Command, opts api.JobListOptions) error {
 	if err != nil {
 		return err
 	}
+	jobs = finalizeJobListPage(items, jobs, opts, localFilters)
 	if outputJSON {
-		if fetchAll {
-			return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{
-				"jobs": items,
-			}))
-		}
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{
-			"jobs": items,
-			"pagination": map[string]interface{}{
-				"page":      jobs.Page,
-				"page_size": jobs.PageSize,
-				"total":     jobs.Total,
-			},
-		}))
+		return output.WriteSuccessJSON(
+			os.Stdout,
+			output.SuccessEnvelope(listPagePayload("jobs", jobs, opts.AllPages)),
+		)
 	}
-	printJobTable(items)
-	if !fetchAll {
-		fmt.Printf("Page %d, %d items total\n", jobs.Page, jobs.Total)
-	}
+	printJobTable(jobs.Items)
+	printListPageSummary(jobs, opts.AllPages)
 	return nil
+}
+
+func jobFetchListOptions(options api.JobListOptions, localFilters bool) api.ListOptions {
+	fetchOptions := options.ListOptions
+	if localFilters && !options.AllPages {
+		fetchOptions.PageSize = maxCLIPageSize
+	}
+	return fetchOptions
+}
+
+func finalizeJobListPage(
+	items []api.JobInfo,
+	serverPage api.Page[api.JobInfo],
+	options api.JobListOptions,
+	localFilters bool,
+) api.Page[api.JobInfo] {
+	switch {
+	case options.AllPages:
+		return api.Page[api.JobInfo]{
+			Items:    items,
+			Total:    int64(len(items)),
+			Page:     1,
+			PageSize: options.PageSize,
+		}
+	case localFilters:
+		return paginateList(items, options.ListOptions)
+	default:
+		serverPage.Items = items
+		return serverPage
+	}
 }
 
 func hasLocalJobFilters(cmd *cobra.Command) bool {
@@ -207,8 +238,12 @@ func runJobGet(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runJobPods(_ *cobra.Command, args []string) error {
+func runJobPods(cmd *cobra.Command, args []string) error {
 	name, err := requiredArg(args, "job_label_name", "name")
+	if err != nil {
+		return err
+	}
+	options, err := readJobPodListOptions(cmd)
 	if err != nil {
 		return err
 	}
@@ -220,11 +255,52 @@ func runJobPods(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return cliErrFromAPI(err)
 	}
-	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{"pods": pods}))
+	pods = filterJobPods(pods, options)
+	sort.SliceStable(pods, func(left, right int) bool {
+		return pods[left].Name < pods[right].Name
+	})
+	page := paginateList(pods, options.ListOptions)
+	return writeListPage("pods", page, options.AllPages, printPodTable)
+}
+
+type jobPodListOptions struct {
+	api.ListOptions
+	Status string
+	Search string
+}
+
+func readJobPodListOptions(cmd *cobra.Command) (jobPodListOptions, error) {
+	listOptions, issues := listPaginationOptions(cmd, maxCLIPageSize)
+	status, _ := cmd.Flags().GetString("status")
+	search, _ := cmd.Flags().GetString("search")
+	status = strings.TrimSpace(status)
+	search = strings.TrimSpace(search)
+	if status != "" && !slices.Contains(podStatuses, status) {
+		issues = append(issues, invalidIssue("status", i18n.T("err_invalid_pod_status", status)))
 	}
-	printPodTable(pods)
-	return nil
+	if len(issues) > 0 {
+		return jobPodListOptions{}, errUsageFromIssues(issues)
+	}
+	return jobPodListOptions{
+		ListOptions: listOptions,
+		Status:      status,
+		Search:      search,
+	}, nil
+}
+
+func filterJobPods(pods []api.PodDetail, options jobPodListOptions) []api.PodDetail {
+	search := strings.ToLower(options.Search)
+	filtered := pods[:0]
+	for _, pod := range pods {
+		if options.Status != "" && pod.Phase != options.Status {
+			continue
+		}
+		if search != "" && !strings.Contains(strings.ToLower(pod.Name), search) {
+			continue
+		}
+		filtered = append(filtered, pod)
+	}
+	return filtered
 }
 
 func runJobEvents(_ *cobra.Command, args []string) error {
@@ -1099,6 +1175,8 @@ func validateJobListFilters(cmd *cobra.Command) error {
 
 func jobListFilterIssues(cmd *cobra.Command) []usageIssue {
 	days, _ := cmd.Flags().GetInt("days")
+	search, _ := cmd.Flags().GetString("search")
+	sortFields, _ := cmd.Flags().GetString("sort")
 	status, _ := cmd.Flags().GetString("status")
 	jobType, _ := cmd.Flags().GetString("type")
 	interactive, _ := cmd.Flags().GetBool("interactive")
@@ -1111,6 +1189,13 @@ func jobListFilterIssues(cmd *cobra.Command) []usageIssue {
 	if days < -1 {
 		issues = append(issues, invalidIssue("days", i18n.T("err_invalid_job_days")))
 	}
+	if utf8.RuneCountInString(strings.TrimSpace(search)) > jobMaxSearchRunes {
+		issues = append(issues, invalidIssue(
+			"search",
+			i18n.T("err_job_search_too_long", jobMaxSearchRunes),
+		))
+	}
+	issues = append(issues, jobSortIssues(strings.TrimSpace(sortFields))...)
 	if status != "" && !slices.Contains(jobStatuses, status) {
 		issues = append(issues, invalidIssue("status", i18n.T("err_invalid_job_status", status)))
 	}
@@ -1140,6 +1225,37 @@ func jobListFilterIssues(cmd *cobra.Command) []usageIssue {
 	}
 	if fromTime != nil && toTime != nil && fromTime.After(*toTime) {
 		issues = append(issues, invalidIssue("from", i18n.T("err_invalid_time_range")))
+	}
+	return issues
+}
+
+func jobSortIssues(raw string) []usageIssue {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	issues := []usageIssue{}
+	if len(parts) > 3 {
+		issues = append(issues, invalidIssue("sort", i18n.T("err_job_sort_too_many")))
+	}
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		field := strings.TrimPrefix(part, "-")
+		if !slices.Contains(jobListSortFields, field) {
+			issues = append(issues, invalidIssue(
+				"sort",
+				i18n.T("err_job_sort_unsupported", field),
+			))
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			issues = append(issues, invalidIssue(
+				"sort",
+				i18n.T("err_job_sort_duplicate", field),
+			))
+			continue
+		}
+		seen[field] = struct{}{}
 	}
 	return issues
 }
@@ -1280,7 +1396,7 @@ func printJobTable(jobs []api.JobInfo) {
 		i18n.PadRight(i18n.T("table_status"), 14),
 		i18n.PadRight(i18n.T("table_queue"), 18),
 		i18n.PadRight(i18n.T("table_nodes"), 22),
-		i18n.PadRight(i18n.T("table_resources"), 24))
+		i18n.T("table_resources"))
 	for _, job := range jobs {
 		fmt.Printf("%s %s %s %s %s %s %s\n",
 			i18n.PadRight(job.Name, 24),
@@ -1289,7 +1405,7 @@ func printJobTable(jobs []api.JobInfo) {
 			i18n.PadRight(job.Status, 14),
 			i18n.PadRight(job.Queue, 18),
 			i18n.PadRight(strings.Join(job.Nodes, ","), 22),
-			i18n.PadRight(formatResources(job.Resources), 24))
+			formatResources(job.Resources))
 	}
 }
 
@@ -1298,6 +1414,7 @@ func printJobDetail(job *api.JobDetail) {
 		return
 	}
 	fmt.Printf("%s: %s\n", i18n.T("table_name"), job.Name)
+	fmt.Printf("%s: %s\n", i18n.T("table_namespace"), emptyDash(job.Namespace))
 	fmt.Printf("%s: %s\n", i18n.T("table_job_name"), job.JobName)
 	fmt.Printf("%s: %s\n", i18n.T("table_type"), job.JobType)
 	fmt.Printf("%s: %s\n", i18n.T("table_status"), job.Status)
@@ -1387,7 +1504,8 @@ func addCreateCommonFlags(cmd *cobra.Command) {
 func init() {
 	jobLsCmd.Flags().Bool("all", false, "List all jobs visible to this account")
 	jobLsCmd.Flags().String("user", "", "List jobs for a username")
-	jobLsCmd.Flags().Int("days", 0, "Look back days for --all or --user; -1 means all")
+	jobLsCmd.Flags().String("search", "", i18n.T("flag_search"))
+	jobLsCmd.Flags().Int("days", 0, i18n.T("flag_days"))
 	jobLsCmd.Flags().String("status", "", "Filter by job status")
 	jobLsCmd.Flags().String("type", "", "Filter by job type")
 	jobLsCmd.Flags().String("node", "", "Filter by node name")
@@ -1397,9 +1515,13 @@ func init() {
 	jobLsCmd.Flags().Bool("interactive", false, "Only show interactive jobs")
 	jobLsCmd.Flags().Bool("batch", false, "Only show batch jobs")
 	addJobListFlags(jobLsCmd)
+	jobPodsCmd.Flags().String("status", "", i18n.T("flag_status"))
+	jobPodsCmd.Flags().String("search", "", i18n.T("flag_search"))
+	addListPaginationFlags(jobPodsCmd)
 
 	adminJobLsCmd.Flags().String("user", "", "List jobs for a username")
-	adminJobLsCmd.Flags().Int("days", 0, "Look back days; -1 means all")
+	adminJobLsCmd.Flags().String("search", "", i18n.T("flag_search"))
+	adminJobLsCmd.Flags().Int("days", 0, i18n.T("flag_days"))
 	adminJobLsCmd.Flags().String("status", "", "Filter by job status")
 	adminJobLsCmd.Flags().String("type", "", "Filter by job type")
 	adminJobLsCmd.Flags().String("node", "", "Filter by node name")
@@ -1442,6 +1564,7 @@ func init() {
 	}
 	completion.RegisterFlagValue([]string{"job", "ls"}, "status", staticValueCompleter(jobStatuses, nil))
 	completion.RegisterFlagValue([]string{"job", "ls"}, "type", staticValueCompleter(jobTypes, nil))
+	completion.RegisterFlagValue([]string{"job", "pods"}, "status", staticValueCompleter(podStatuses, nil))
 	completion.RegisterFlagValue([]string{"admin", "job", "ls"}, "status", staticValueCompleter(jobStatuses, nil))
 	completion.RegisterFlagValue([]string{"admin", "job", "ls"}, "type", staticValueCompleter(jobTypes, nil))
 	scheduleValues := []string{"normal", "backfill"}

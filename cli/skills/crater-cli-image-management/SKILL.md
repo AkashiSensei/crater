@@ -1,6 +1,6 @@
 ---
 name: crater-cli-image-management
-version: 1.0.0
+version: 1.1.0
 description: "Crater CLI 用户镜像与环境管理：指导 AI Agent 使用 crater image 构建、上传、删除、分享、更新自己可管理的镜像、查看 CUDA base image 和获取 Harbor 凭据。管理员镜像操作请使用 crater-cli-admin-image-management。"
 metadata:
   requires:
@@ -34,6 +34,10 @@ metadata:
 ## 常用范例
 
 ```bash
+crater image ls --search pytorch --page-size 15 --json --no-interactive
+crater image ls --available --type jupyter --all-pages --json --no-interactive
+crater image build ls --page-size 15 --json --no-interactive
+
 crater image build pip-apt \
   --name cuda-demo \
   --tag v1 \
@@ -60,14 +64,16 @@ crater image harbor credential --yes --json --no-interactive
 ## 工作流
 
 1. 先用 `crater auth ls --json` 确认 active credentials。
-2. 构建镜像前确认 `--name`、`--tag` 和构建内容非空。
-3. Dockerfile/envd 大内容优先通过 `--file` 传入，避免 shell 转义问题。
-4. 批量删除或取消构建时使用逗号分隔 ID。
-5. 处理 Harbor 凭据时只在用户明确要求时执行，并提醒其输出敏感。
-6. 如果用户要求管理 CUDA base image、平台级镜像列表、删除他人镜像或修改公共可见性，切换到管理员 skill。
+2. 镜像列表和构建记录列表默认本地分页，每页 `15` 条、最大 `200`；读取 `data.pagination` 逐页处理。筛选在分页前执行并保持接口返回顺序；只有明确需要全部记录时使用 `--all-pages`。
+3. 构建镜像前确认 `--name`、`--tag` 和构建内容非空。
+4. Dockerfile/envd 大内容优先通过 `--file` 传入，避免 shell 转义问题。
+5. 批量删除或取消构建时使用逗号分隔 ID。
+6. 处理 Harbor 凭据时只在用户明确要求时执行，并提醒其输出敏感。
+7. 如果用户要求管理 CUDA base image、平台级镜像列表、删除他人镜像或修改公共可见性，切换到管理员 skill。
 
 ## 输出处理
 
-- 成功 JSON 读取 `stdout.data.message` 或具体数据键。
+- 成功 JSON 读取 `stdout.data.message` 或具体数据键。`image ls` 使用 `data.images`，`image build ls` 使用 `data.builds`；普通分页还包含 `data.pagination`，`--all-pages` 省略它。
+- 分页、type 与 visibility 等本地参数问题可能聚合在 stderr JSON 的 `context.issues`；一次修正全部字段。
 - API 失败读取 stderr JSON 的 `category`、`code`、`context.http_status`。
 - 401 表示需要重新登录；403 通常表示权限不足。
