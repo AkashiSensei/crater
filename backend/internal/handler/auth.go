@@ -98,7 +98,7 @@ type (
 	}
 
 	VersionInfo struct {
-		AppVersion string `json:"appVersion"` // Application version (tag name or short SHA)
+		AppVersion string `json:"appVersion"` // Release version or development build metadata
 		CommitSHA  string `json:"commitSHA"`  // Full commit SHA
 		BuildType  string `json:"buildType"`  // Build type (release or development)
 		BuildTime  string `json:"buildTime"`  // Build time in UTC

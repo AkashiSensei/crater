@@ -332,6 +332,18 @@ PR 描述必须使用**双语 Markdown**，并覆盖：
 
 PR 创建后，需要检查 workflow 状态。PR 也可能需要和 Copilot review 或人工 review 进行多轮迭代。Agent 可以自行获取 PR 链接，或要求开发者提供链接；随后阅读 review 意见，判断每条意见是否正确、是否值得修改，再提出修改方案。未经开发者讨论和确认，不要直接按 review 意见修改代码。
 
+## 应用构建版本
+
+前端、后端和存储服务的构建 workflow 统一调用 `hack/set-build-version.sh`，生成一致的构建字段。
+
+- `v1.1.1` 这样的正式发布 tag 会生成 `AppVersion=1.1.1` 和 `BuildType=release`。
+- 正式发布 tag 必须严格使用 `vX.Y.Z` 格式，不支持 `v1.1.1-rc.1` 这样的预发布 tag。Crater 目前不需要预发布渠道，不值得为此引入额外的发布、版本比较和产物清理复杂度。
+- GitHub 正式发布 tag 中的版本部分必须遵循 SemVer，因此不接受 `v01.2.3` 这类数字标识符含前导零的 tag；这是仓库的 tag 命名约束，不是对应用代码的约束。
+- 开发提交会生成 `AppVersion=<base>+dev.<first-parent-distance>.g<short-sha>` 和 `BuildType=development`，例如 `1.1.1+dev.8.g0163298b`。
+- 基础版本取 first-parent 历史上最近的可达正式发布 tag；Git 会选择无歧义的提交缩写。
+- `CommitSHA` 始终保留完整提交 SHA，`BuildTime` 始终使用 UTC 构建时间戳。
+- 开发版构建元数据用于标识具体产物，不决定正式版本顺序或 API 兼容性。CLI 与后端的兼容性由下方独立的 API 版本契约决定。
+
 ## CLI / 后端 API 兼容版本
 
 这套约定只适用于由用户独立安装和升级的 CLI 所调用的 API；由管理员统一部署的前端不在其范围内。

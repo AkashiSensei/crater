@@ -338,6 +338,18 @@ Before opening or updating a PR, run the relevant local review path for the chan
 
 After creating the PR, check workflow status. The PR may need multiple rounds of iteration with Copilot review or human review. An Agent may fetch the PR link itself or ask the developer for it, inspect review comments, judge whether each suggestion is correct and worth changing, then propose a modification plan. Do not apply review-driven code changes until the developer has discussed and approved the plan.
 
+## Application Build Versions
+
+Frontend, backend, and storage build workflows use `hack/set-build-version.sh` to derive one consistent set of build fields.
+
+- A release tag such as `v1.1.1` produces `AppVersion=1.1.1` and `BuildType=release`.
+- Release tags must use exactly `vX.Y.Z`; prerelease tags such as `v1.1.1-rc.1` are not supported. Crater does not currently need prerelease channels, and their additional release, version-comparison, and artifact-cleanup complexity is not justified.
+- The version portion of GitHub release tags must follow SemVer, so tags with leading-zero numeric identifiers such as `v01.2.3` are not accepted; this is a repository tag-naming constraint, not an application-code constraint.
+- A development commit produces `AppVersion=<base>+dev.<first-parent-distance>.g<short-sha>` and `BuildType=development`, for example `1.1.1+dev.8.g0163298b`.
+- The base is the nearest reachable release tag on the first-parent history. Git chooses an unambiguous abbreviated commit name.
+- `CommitSHA` remains the full commit SHA, and `BuildTime` remains the UTC build timestamp.
+- Development build metadata identifies an artifact but does not determine release precedence or API compatibility. CLI/backend compatibility uses the separate API version contract below.
+
 ## CLI / Backend API Compatibility Versions
 
 This contract applies only to APIs consumed by the independently distributed CLI. The administrator-deployed frontend is outside its scope.

@@ -15,8 +15,8 @@ export GOLANGCI_LINT_CACHE
 # DEV_BUILD_TYPE ?= development
 # DEV_BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 # Version information for release builds
-DEV_APP_VERSION ?= v0.0.0
-DEV_COMMIT_SHA ?= 1234567890abcdef1234567890abcdef12345678
+DEV_APP_VERSION ?= 1.1.1
+DEV_COMMIT_SHA ?= 568788e23a3e72218235e4852ad76f7e56c9c2dc
 DEV_BUILD_TYPE ?= release
 DEV_BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 

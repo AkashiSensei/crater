@@ -28,6 +28,7 @@ on:
       - "backend/storage-server.Dockerfile"
       - "backend/go.mod"
       - "backend/go.sum"
+      - "hack/set-build-version.sh"
       - ".github/workflows/storage-build.yml"
     tags:
       - "v*.*.*"
@@ -109,26 +110,7 @@ jobs:
 
       - name: Set version variables
         id: set-version
-        run: |
-          COMMIT_SHA="${{ github.sha }}"
-          SHORT_SHA="${COMMIT_SHA:0:7}"
-
-          # Check if triggered by tag
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            # Tag trigger: use tag version (keep v prefix)
-            APP_VERSION="${{ github.ref_name }}"
-            BUILD_TYPE="release"
-          else
-            # Branch trigger: use commit SHA
-            APP_VERSION="$SHORT_SHA"
-            BUILD_TYPE="development"
-          fi
-
-          # Set outputs
-          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
-          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
-          echo "build_type=$BUILD_TYPE" >> $GITHUB_OUTPUT
-          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+        run: bash ../hack/set-build-version.sh
 
       - name: Build storage server binaries
         run: |

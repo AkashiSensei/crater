@@ -20,6 +20,8 @@ import { Badge } from '@/components/ui/badge'
 
 import { atomBackendVersion } from '@/utils/store'
 
+import { VersionValue } from './VersionValue'
+
 /**
  * VersionPage - Version information business component
  *
@@ -70,11 +72,13 @@ export default function VersionPage() {
           {/* Frontend version row */}
           <div className="flex flex-col items-center gap-2 md:flex-row md:gap-8">
             {/* Frontend version */}
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-2">
               <span className="text-muted-foreground">{t('about.frontendVersion')}</span>
-              <span className="text-foreground font-mono font-semibold">
-                {frontendAppVersion || t('about.unavailable')}
-              </span>
+              <VersionValue
+                version={frontendAppVersion}
+                buildType={frontendBuildType}
+                fallback={t('about.unavailable')}
+              />
               {frontendBuildType && frontendBuildType !== 'release' && (
                 <Badge variant="secondary" className="text-xs">
                   {t('about.developmentVersion')}
@@ -128,11 +132,13 @@ export default function VersionPage() {
           {/* Backend version row */}
           <div className="flex flex-col items-center gap-2 md:flex-row md:gap-8">
             {/* Backend version */}
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-2">
               <span className="text-muted-foreground">{t('about.backendVersion')}</span>
-              <span className="text-foreground font-mono font-semibold">
-                {backendVersion?.appVersion || t('about.unavailable')}
-              </span>
+              <VersionValue
+                version={backendVersion?.appVersion}
+                buildType={backendVersion?.buildType}
+                fallback={t('about.unavailable')}
+              />
               {backendVersion?.buildType && backendVersion.buildType !== 'release' && (
                 <Badge variant="secondary" className="text-xs">
                   {t('about.developmentVersion')}

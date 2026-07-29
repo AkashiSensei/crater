@@ -13497,7 +13497,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "appVersion": {
-                    "description": "Application version (tag name or short SHA)",
+                    "description": "Release version or development build metadata",
                     "type": "string"
                 },
                 "buildTime": {
